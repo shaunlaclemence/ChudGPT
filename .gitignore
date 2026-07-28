@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets & local state — never commit keys
+.env
+.env.*
+!.env.example
+keys.json
+*.tokens.json
+state.json
