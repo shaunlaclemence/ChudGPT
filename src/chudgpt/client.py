@@ -86,6 +86,8 @@ class Conversation:
 class ChudClient:
     """Entry point: wraps Rotor with a conversation-friendly API.
 
+    chudgpt version 0.2.1 (see pyproject.toml — bump both together on release).
+
     Keys are resolved in this order: an explicit ``keys`` dict, a ``secrets_path``
     pointing at a per-account key inventory file (e.g. ``secrets.json`` — never
     commit it), or — if neither is given — environment variables /
