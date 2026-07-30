@@ -39,6 +39,17 @@ class StreamChunk:
     raw: Any = None
 
 
+@dataclass
+class KeyUsage:
+    provider: str
+    status: str  # "ok" or why it's currently skipped
+    requests_today: int
+    known_rpd: int | None  # the provider's known daily cap, if any — a hint, not a guarantee
+    percent_used: float | None  # requests_today / known_rpd * 100, or None if known_rpd is unset
+    tokens_today: int
+    resets_at: datetime
+
+
 def _retry_after(exc: openai.APIStatusError) -> float | None:
     try:
         value = exc.response.headers.get("retry-after")
@@ -254,6 +265,33 @@ class Rotor:
             for key in self.keys.get(cfg.name, []):
                 kid = key_id(cfg.name, key)
                 report[kid] = self.tracker.status(kid, cfg, now) or "ok"
+        return report
+
+    def usage(self) -> dict[str, KeyUsage]:
+        """Today's request/token count per key, and % of the known daily cap used.
+
+        ``percent_used`` is only as good as ``known_rpd`` (a proactive-skip hint,
+        not a guarantee from the provider) — free-tier limits drift, so treat this
+        as an estimate, not an authoritative quota dashboard.
+        """
+        now = self._now()
+        report: dict[str, KeyUsage] = {}
+        for cfg in self.providers:
+            for key in self.keys.get(cfg.name, []):
+                kid = key_id(cfg.name, key)
+                count, tokens = self.tracker.counts(kid, cfg, now)
+                percent = (
+                    round(100 * count / cfg.known_rpd, 1) if cfg.known_rpd else None
+                )
+                report[kid] = KeyUsage(
+                    provider=cfg.name,
+                    status=self.tracker.status(kid, cfg, now) or "ok",
+                    requests_today=count,
+                    known_rpd=cfg.known_rpd,
+                    percent_used=percent,
+                    tokens_today=tokens,
+                    resets_at=self.tracker.available_at(kid, cfg, now),
+                )
         return report
 
     def _candidates(self, statuses: dict[str, str], resets: list[datetime]):

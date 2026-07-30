@@ -142,6 +142,25 @@ def test_transient_5xx_moves_on_with_short_cooldown(providers, tmp_path, now):
     )
 
 
+@respx.mock
+def test_usage_reports_percent_of_known_daily_cap(providers, tmp_path, now):
+    respx.post(ALPHA_URL).mock(
+        return_value=HttpResponse(200, json=completion_json("alpha-small"))
+    )
+    rotor = make_rotor(providers, tmp_path, now)
+    rotor.chat("hi")
+    usage = rotor.usage()
+    alpha_kid = next(k for k in usage if k.startswith("alpha:"))
+    beta_kid = next(k for k in usage if k.startswith("beta:"))
+    assert usage[alpha_kid].requests_today == 1
+    assert usage[alpha_kid].known_rpd == 100
+    assert usage[alpha_kid].percent_used == 1.0
+    assert usage[alpha_kid].status == "ok"
+    # beta has no known_rpd (conftest), so percent_used is an unknown, not a false 0%
+    assert usage[beta_kid].known_rpd is None
+    assert usage[beta_kid].percent_used is None
+
+
 def test_explicit_model_and_bad_args(providers, tmp_path, now):
     rotor = make_rotor(providers, tmp_path, now)
     with pytest.raises(ValueError):

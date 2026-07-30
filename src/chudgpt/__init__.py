@@ -10,7 +10,7 @@ from .client import ChudClient, Conversation
 from .config import PROVIDERS, ProviderConfig
 from .errors import AllProvidersExhausted, ChudGPTError, ConfigError, ProviderError
 from .params import Model, Temperature, Tier
-from .rotor import Response, Rotor, StreamChunk
+from .rotor import KeyUsage, Response, Rotor, StreamChunk
 
 __all__ = [
     "PROVIDERS",
@@ -19,6 +19,7 @@ __all__ = [
     "ChudGPTError",
     "ConfigError",
     "Conversation",
+    "KeyUsage",
     "Model",
     "ProviderConfig",
     "ProviderError",

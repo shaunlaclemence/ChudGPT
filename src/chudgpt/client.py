@@ -8,7 +8,7 @@ from typing import Any
 
 from .config import PROVIDERS, ProviderConfig
 from .keystore import load_keys_from_secrets_json
-from .rotor import Response, Rotor, StreamChunk
+from .rotor import KeyUsage, Response, Rotor, StreamChunk
 
 
 class Conversation:
@@ -118,6 +118,10 @@ class ChudClient:
 
     def status(self) -> dict[str, str]:
         return self._rotor.status()
+
+    def usage(self) -> dict[str, KeyUsage]:
+        """Today's request/token count per key, and % of the known daily cap used."""
+        return self._rotor.usage()
 
     def ask(
         self,

@@ -76,6 +76,11 @@ class QuotaTracker:
             return f"hit known daily cap ({cfg.known_rpd} requests)"
         return None
 
+    def counts(self, kid: str, cfg: ProviderConfig, now: datetime) -> tuple[int, int]:
+        """Today's (request count, token count) so far for this key."""
+        st = self._state(kid, cfg, now)
+        return st.count, st.tokens
+
     def available_at(self, kid: str, cfg: ProviderConfig, now: datetime) -> datetime:
         """Best estimate of when an unusable key becomes usable again."""
         st = self._state(kid, cfg, now)
