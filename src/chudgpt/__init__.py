@@ -9,6 +9,7 @@ print(rotor.chat("hello").text)
 from .client import ChudClient, Conversation
 from .config import PROVIDERS, ProviderConfig
 from .errors import AllProvidersExhausted, ChudGPTError, ConfigError, ProviderError
+from .params import Model, Temperature, Tier
 from .rotor import Response, Rotor, StreamChunk
 
 __all__ = [
@@ -18,9 +19,12 @@ __all__ = [
     "ChudGPTError",
     "ConfigError",
     "Conversation",
+    "Model",
     "ProviderConfig",
     "ProviderError",
     "Response",
     "Rotor",
     "StreamChunk",
+    "Temperature",
+    "Tier",
 ]

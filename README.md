@@ -68,7 +68,7 @@ import asyncio
 from chudgpt import ChudClient
 
 async def main():
-    client = ChudClient(config_path="config.json")  # or: ChudClient(keys={"gemini": [...]})
+    client = ChudClient(secrets_path="secrets.json")  # or: ChudClient(keys={"gemini": [...]})
     convo = client.start_conversation()
 
     async for token in convo.send("Explain monads in one paragraph."):
@@ -82,10 +82,29 @@ async def main():
 asyncio.run(main())
 ```
 
-`config_path` accepts a per-account key inventory file (a JSON map of provider name to a
-list of `{account, name, project_name, project_number, api_key}` entries) — only the bare
-`api_key` values are ever read out of it. `Conversation.ask(prompt)` is a non-streaming
-alternative that blocks for the full `Response`.
+`secrets_path` accepts a per-account key inventory file (conventionally named `secrets.json`,
+gitignored, never committed — a JSON map of provider name to a list of `{account, name,
+project_name, project_number, api_key}` entries). Only the bare `api_key` values are ever read
+out of it. `Conversation.ask(prompt)` is a non-streaming alternative that blocks for the full
+`Response`.
+
+## Discovering models
+
+`chudgpt.Model` is a generated enum of every real, currently-usable model id per provider
+(kept in `src/chudgpt/config.json` — a non-secret, packaged catalog, not to be confused with
+your own `secrets.json`). `chudgpt.Tier` (`BEST`/`FAST`) picks the provider's default for a
+quality/speed tradeoff instead of naming an exact model:
+
+```python
+from chudgpt import ChudClient, Model, Tier
+
+reply = client.ask("hi", model=Model.GEMINI_3_6_FLASH)  # exact model
+reply = client.ask("hi", tier=Tier.BEST)                # provider's default "best" model
+```
+
+Pin `model=` only when you've also constrained `providers=` to the one provider that serves
+it — a request that rotates to a different provider won't recognize another provider's model
+id.
 
 ## Terms-of-service note
 

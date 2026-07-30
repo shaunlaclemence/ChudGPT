@@ -22,7 +22,7 @@ DEFAULT_KEYS_FILE = Path.home() / ".chudgpt" / "keys.json"
 
 @dataclass
 class KeyConfig:
-    """One entry in a per-account key inventory file (see ``load_keys_from_config_json``)."""
+    """One entry in a per-account key inventory file (see ``load_keys_from_secrets_json``)."""
 
     account: str
     name: str
@@ -31,8 +31,9 @@ class KeyConfig:
     api_key: str
 
 
-def load_keys_from_config_json(path: Path | str) -> dict[str, list[str]]:
-    """Return {provider_name: [key, ...]} from a per-account key inventory file.
+def load_keys_from_secrets_json(path: Path | str) -> dict[str, list[str]]:
+    """Return {provider_name: [key, ...]} from a per-account key inventory file
+    (conventionally named ``secrets.json`` — never commit it).
 
     The file maps provider name -> a list of ``KeyConfig``-shaped entries (each
     carrying bookkeeping like which account/project a key belongs to). Only the
@@ -43,7 +44,7 @@ def load_keys_from_config_json(path: Path | str) -> dict[str, list[str]]:
     try:
         raw = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as e:
-        raise ConfigError(f"could not read config file {path}: {e}") from e
+        raise ConfigError(f"could not read secrets file {path}: {e}") from e
 
     keys: dict[str, list[str]] = {}
     for provider, entries in raw.items():

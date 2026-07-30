@@ -7,16 +7,24 @@ from pathlib import Path
 from typing import Any
 
 from .config import PROVIDERS, ProviderConfig
-from .keystore import load_keys_from_config_json
-from .rotor import Response, Rotor
+from .keystore import load_keys_from_secrets_json
+from .rotor import Response, Rotor, StreamChunk
 
 
 class Conversation:
     """A multi-turn chat session. History lives in memory for the life of this object."""
 
-    def __init__(self, rotor: Rotor, *, tier: str = "fast", system: str | None = None):
+    def __init__(
+        self,
+        rotor: Rotor,
+        *,
+        tier: str = "fast",
+        model: str | None = None,
+        system: str | None = None,
+    ):
         self._rotor = rotor
         self._tier = tier
+        self._model = model
         self.messages: list[dict[str, str]] = []
         if system:
             self.messages.append({"role": "system", "content": system})
@@ -36,7 +44,7 @@ class Conversation:
         async for chunk in self._rotor.chat_stream(
             messages=self.messages,
             tier=tier or self._tier,
-            model=model,
+            model=model or self._model,
             **request_kwargs,
         ):
             if chunk.done:
@@ -63,7 +71,7 @@ class Conversation:
         reply = self._rotor.chat(
             messages=self.messages,
             tier=tier or self._tier,
-            model=model,
+            model=model or self._model,
             **request_kwargs,
         )
         self.messages.append({"role": "assistant", "content": reply.text})
@@ -78,25 +86,27 @@ class Conversation:
 class ChudClient:
     """Entry point: wraps Rotor with a conversation-friendly API.
 
-    Keys are resolved in this order: an explicit ``keys`` dict, a ``config_path``
-    pointing at a per-account key inventory file (e.g. ``config.json``), or —
-    if neither is given — environment variables / ``~/.chudgpt/keys.json`` via
-    ``Rotor.from_env()``.
+    Keys are resolved in this order: an explicit ``keys`` dict, a ``secrets_path``
+    pointing at a per-account key inventory file (e.g. ``secrets.json`` — never
+    commit it), or — if neither is given — environment variables /
+    ``~/.chudgpt/keys.json`` via ``Rotor.from_env()``.
     """
 
     def __init__(
         self,
         keys: dict[str, list[str]] | None = None,
         *,
-        config_path: Path | str | None = None,
+        secrets_path: Path | str | None = None,
         providers: tuple[ProviderConfig, ...] = PROVIDERS,
         state_file: Path | str | None = None,
         tier: str = "fast",
+        model: str | None = None,
         **rotor_kwargs: Any,
     ):
-        if keys is None and config_path is not None:
-            keys = load_keys_from_config_json(config_path)
+        if keys is None and secrets_path is not None:
+            keys = load_keys_from_secrets_json(secrets_path)
         self._tier = tier
+        self._model = model
         if keys is not None:
             self._rotor = Rotor(
                 keys, providers=providers, state_file=state_file, **rotor_kwargs
@@ -109,8 +119,52 @@ class ChudClient:
     def status(self) -> dict[str, str]:
         return self._rotor.status()
 
-    def ask(self, prompt: str, **kwargs: Any) -> Response:
-        return self._rotor.chat(prompt, tier=kwargs.pop("tier", self._tier), **kwargs)
+    def ask(
+        self,
+        prompt: str | None = None,
+        *,
+        messages: list[dict[str, str]] | None = None,
+        tier: str | None = None,
+        model: str | None = None,
+        **request_kwargs: Any,
+    ) -> Response:
+        """One-shot, non-streaming turn. Mirrors Rotor.chat()'s full signature."""
+        return self._rotor.chat(
+            prompt,
+            messages=messages,
+            tier=tier or self._tier,
+            model=model or self._model,
+            **request_kwargs,
+        )
 
-    def start_conversation(self, system: str | None = None) -> Conversation:
-        return Conversation(self._rotor, tier=self._tier, system=system)
+    def stream(
+        self,
+        prompt: str | None = None,
+        *,
+        messages: list[dict[str, str]] | None = None,
+        tier: str | None = None,
+        model: str | None = None,
+        **request_kwargs: Any,
+    ) -> AsyncIterator[StreamChunk]:
+        """One-shot streaming turn (no history kept). Mirrors Rotor.chat_stream()."""
+        return self._rotor.chat_stream(
+            prompt,
+            messages=messages,
+            tier=tier or self._tier,
+            model=model or self._model,
+            **request_kwargs,
+        )
+
+    def start_conversation(
+        self,
+        system: str | None = None,
+        *,
+        tier: str | None = None,
+        model: str | None = None,
+    ) -> Conversation:
+        return Conversation(
+            self._rotor,
+            tier=tier or self._tier,
+            model=model or self._model,
+            system=system,
+        )

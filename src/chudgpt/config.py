@@ -8,7 +8,9 @@ hint only — the 429 response is always the source of truth.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from importlib import resources
 from typing import Literal
 
 ResetPolicy = Literal["midnight_pt", "rolling"]
@@ -96,3 +98,19 @@ def provider_by_name(
         if p.name == name:
             return p
     raise KeyError(f"unknown provider {name!r}")
+
+
+def load_model_catalog() -> dict[str, list[str]]:
+    """Every known-usable model id per provider (not just the tier defaults above).
+
+    Read from the packaged ``config.json`` (shipped alongside this module, so it's
+    available whether chudgpt is run from source or installed via pip/uv) — a
+    non-secret catalog of real, currently-live model ids, kept up to date by hand
+    against each provider's docs. This is NOT the same file as ``secrets.json``,
+    which holds your actual API keys and is never committed.
+    """
+    raw = resources.files(__package__).joinpath("config.json").read_text()
+    return json.loads(raw)
+
+
+MODEL_CATALOG: dict[str, list[str]] = load_model_catalog()

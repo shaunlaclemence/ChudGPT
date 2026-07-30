@@ -5,7 +5,7 @@ import respx
 from httpx import Response as HttpResponse
 
 from chudgpt.client import ChudClient
-from chudgpt.keystore import load_keys_from_config_json
+from chudgpt.keystore import load_keys_from_secrets_json
 
 ALPHA_URL = "https://alpha.test/v1/chat/completions"
 
@@ -76,8 +76,8 @@ async def test_conversation_send_grows_history_across_turns(providers, tmp_path,
         ]
 
 
-def test_load_keys_from_config_json(tmp_path):
-    path = tmp_path / "config.json"
+def test_load_keys_from_secrets_json(tmp_path):
+    path = tmp_path / "secrets.json"
     path.write_text(
         json.dumps(
             {
@@ -100,5 +100,5 @@ def test_load_keys_from_config_json(tmp_path):
             }
         )
     )
-    keys = load_keys_from_config_json(path)
+    keys = load_keys_from_secrets_json(path)
     assert keys == {"gemini": ["key-a", "key-b"]}
