@@ -9,18 +9,31 @@ hint only — the 429 response is always the source of truth.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, List
+import json
+
+with open("config.json", "r") as file:
+    config_data = json.load(file)
+
 
 ResetPolicy = Literal["midnight_pt", "rolling"]
 
 TIERS = ("best", "fast")
+
+@dataclass
+class KeyConfig:
+    account: str
+    name: str
+    project_name: str
+    project_number: int
+    api_key: str
 
 
 @dataclass(frozen=True)
 class ProviderConfig:
     name: str
     base_url: str
-    env_var: str
+    keys: List[KeyConfig]
     models: dict[str, str]  # tier -> concrete model id
     priority: int = 100  # lower tries first
     known_rpd: int | None = None  # requests/day on the free tier, if known
@@ -44,47 +57,11 @@ PROVIDERS: tuple[ProviderConfig, ...] = (
     ProviderConfig(
         name="gemini",
         base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-        env_var="GEMINI_API_KEY",
+        keys=json.loads(config_data)["gemini"],
         models={"best": "gemini-2.5-pro", "fast": "gemini-2.5-flash"},
         priority=10,
         known_rpd=1500,
         reset="midnight_pt",
-    ),
-    ProviderConfig(
-        name="groq",
-        base_url="https://api.groq.com/openai/v1",
-        env_var="GROQ_API_KEY",
-        models={
-            "best": "llama-3.3-70b-versatile",
-            "fast": "llama-3.3-70b-versatile",
-        },
-        priority=20,
-        known_rpd=1000,
-    ),
-    ProviderConfig(
-        name="mistral",
-        base_url="https://api.mistral.ai/v1",
-        env_var="MISTRAL_API_KEY",
-        models={"best": "mistral-large-latest", "fast": "mistral-small-latest"},
-        priority=30,
-    ),
-    ProviderConfig(
-        name="xai",
-        base_url="https://api.x.ai/v1",
-        env_var="XAI_API_KEY",
-        models={"best": "grok-4", "fast": "grok-3-mini"},
-        priority=40,
-    ),
-    ProviderConfig(
-        name="openrouter",
-        base_url="https://openrouter.ai/api/v1",
-        env_var="OPENROUTER_API_KEY",
-        models={
-            "best": "deepseek/deepseek-r1:free",
-            "fast": "meta-llama/llama-3.3-70b-instruct:free",
-        },
-        priority=50,
-        known_rpd=50,
     ),
 )
 

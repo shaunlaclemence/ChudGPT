@@ -16,3 +16,4 @@ wheels/
 keys.json
 *.tokens.json
 state.json
+config.json

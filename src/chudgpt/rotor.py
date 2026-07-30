@@ -57,7 +57,7 @@ class Rotor:
         if not keys:
             raise ConfigError("Rotor needs at least one provider key")
         self.providers = tuple(sorted(providers, key=lambda p: p.priority))
-        self.keys = {p.name: keys[p.name] for p in self.providers if keys.get(p.name)}
+        self.keys = {p.name: p.keys for p in self.providers}
         if not self.keys:
             raise ConfigError("none of the supplied keys match a known provider")
         self._state_file = state_file
@@ -72,7 +72,7 @@ class Rotor:
 
     def chat(
         self,
-        prompt: str | None = None,
+        prompt: str,
         *,
         messages: list[dict[str, str]] | None = None,
         tier: str = "fast",
