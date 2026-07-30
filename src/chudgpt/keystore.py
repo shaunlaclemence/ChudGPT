@@ -11,12 +11,50 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 from .config import PROVIDERS, ProviderConfig
 from .errors import ConfigError
 
 DEFAULT_KEYS_FILE = Path.home() / ".chudgpt" / "keys.json"
+
+
+@dataclass
+class KeyConfig:
+    """One entry in a per-account key inventory file (see ``load_keys_from_config_json``)."""
+
+    account: str
+    name: str
+    project_name: str
+    project_number: int
+    api_key: str
+
+
+def load_keys_from_config_json(path: Path | str) -> dict[str, list[str]]:
+    """Return {provider_name: [key, ...]} from a per-account key inventory file.
+
+    The file maps provider name -> a list of ``KeyConfig``-shaped entries (each
+    carrying bookkeeping like which account/project a key belongs to). Only the
+    bare ``api_key`` strings are ever extracted and returned; the account/project
+    metadata never leaves this function.
+    """
+    path = Path(path)
+    try:
+        raw = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        raise ConfigError(f"could not read config file {path}: {e}") from e
+
+    keys: dict[str, list[str]] = {}
+    for provider, entries in raw.items():
+        parsed = [KeyConfig(**entry) for entry in entries]
+        chosen = [kc.api_key for kc in parsed if kc.api_key]
+        if chosen:
+            keys[provider] = chosen
+
+    if not keys:
+        raise ConfigError(f"no API keys found in {path}")
+    return keys
 
 
 def key_id(provider: str, key: str) -> str:

@@ -59,6 +59,34 @@ Free key signup: [Gemini](https://aistudio.google.com/apikey) ·
 [Groq](https://console.groq.com/keys) · [Mistral](https://console.mistral.ai/api-keys) ·
 [xAI](https://console.x.ai) · [OpenRouter](https://openrouter.ai/keys)
 
+## Streaming client
+
+For a conversational, token-streaming interface on top of the same rotation logic:
+
+```python
+import asyncio
+from chudgpt import ChudClient
+
+async def main():
+    client = ChudClient(config_path="config.json")  # or: ChudClient(keys={"gemini": [...]})
+    convo = client.start_conversation()
+
+    async for token in convo.send("Explain monads in one paragraph."):
+        print(token, end="", flush=True)
+    print()
+
+    # continues the same conversation — full history is sent each turn
+    async for token in convo.send("Now in one sentence."):
+        print(token, end="", flush=True)
+
+asyncio.run(main())
+```
+
+`config_path` accepts a per-account key inventory file (a JSON map of provider name to a
+list of `{account, name, project_name, project_number, api_key}` entries) — only the bare
+`api_key` values are ever read out of it. `Conversation.ask(prompt)` is a non-streaming
+alternative that blocks for the full `Response`.
+
 ## Terms-of-service note
 
 Rotating across **different providers** — one free key each — is ordinary failover and
@@ -77,4 +105,4 @@ uv run ruff check
 
 ## Not yet implemented
 
-Streaming, async client, embeddings/vision, a local proxy server.
+Embeddings/vision, agentic tool-calling, a local proxy server.

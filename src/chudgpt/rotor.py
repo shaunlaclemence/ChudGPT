@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -11,7 +11,7 @@ from typing import Any
 import openai
 
 from .config import PROVIDERS, ProviderConfig
-from .errors import AllProvidersExhausted, ConfigError
+from .errors import AllProvidersExhausted, ConfigError, ProviderError
 from .keystore import key_id, load_keys
 from .quota import QuotaTracker, next_reset
 from .state import load_state, save_state
@@ -26,6 +26,16 @@ class Response:
     provider: str
     model: str
     usage: dict[str, int] = field(default_factory=dict)
+    raw: Any = None
+
+
+@dataclass
+class StreamChunk:
+    delta: str
+    provider: str
+    model: str
+    done: bool = False
+    usage: dict[str, int] | None = None
     raw: Any = None
 
 
@@ -57,7 +67,7 @@ class Rotor:
         if not keys:
             raise ConfigError("Rotor needs at least one provider key")
         self.providers = tuple(sorted(providers, key=lambda p: p.priority))
-        self.keys = {p.name: p.keys for p in self.providers}
+        self.keys = {p.name: keys[p.name] for p in self.providers if p.name in keys}
         if not self.keys:
             raise ConfigError("none of the supplied keys match a known provider")
         self._state_file = state_file
@@ -72,7 +82,7 @@ class Rotor:
 
     def chat(
         self,
-        prompt: str,
+        prompt: str | None = None,
         *,
         messages: list[dict[str, str]] | None = None,
         tier: str = "fast",
@@ -139,6 +149,103 @@ class Rotor:
 
         raise AllProvidersExhausted(statuses, min(resets) if resets else None)
 
+    async def chat_stream(
+        self,
+        prompt: str | None = None,
+        *,
+        messages: list[dict[str, str]] | None = None,
+        tier: str = "fast",
+        model: str | None = None,
+        **request_kwargs: Any,
+    ) -> AsyncIterator[StreamChunk]:
+        """Stream a chat completion, rotating to the next healthy key on quota errors.
+
+        Rotation only happens before the first chunk of a stream is yielded — once
+        content has reached the caller, a mid-stream failure is raised as
+        ``ProviderError`` rather than silently retried (that would duplicate output).
+        """
+        if (prompt is None) == (messages is None):
+            raise ValueError("pass exactly one of `prompt` or `messages`")
+        if messages is None:
+            messages = [{"role": "user", "content": prompt}]
+
+        statuses: dict[str, str] = {}
+        resets: list[datetime] = []
+
+        for cfg, key in self._candidates(statuses, resets):
+            kid = key_id(cfg.name, key)
+            now = self._now()
+            resolved_model = model or cfg.model_for(tier)
+            try:
+                stream = await self._call_stream(
+                    cfg, key, messages, resolved_model, request_kwargs
+                )
+            except openai.RateLimitError as e:
+                retry_s = _retry_after(e)
+                until = (
+                    now + timedelta(seconds=retry_s)
+                    if retry_s
+                    else next_reset(cfg, now)
+                )
+                self.tracker.mark_exhausted(kid, cfg, now, until)
+                statuses[kid] = (
+                    f"rate limited (429), cooling down until {until.isoformat()}"
+                )
+                resets.append(until)
+                self._persist()
+                continue
+            except openai.AuthenticationError:
+                until = now + timedelta(seconds=AUTH_FAILURE_COOLDOWN_S)
+                self.tracker.mark_exhausted(kid, cfg, now, until)
+                statuses[kid] = "authentication failed (bad key?)"
+                self._persist()
+                continue
+            except (openai.APIConnectionError, openai.InternalServerError) as e:
+                until = now + timedelta(seconds=TRANSIENT_COOLDOWN_S)
+                self.tracker.mark_exhausted(kid, cfg, now, until)
+                statuses[kid] = (
+                    f"transient error ({type(e).__name__}), retrying in {TRANSIENT_COOLDOWN_S}s"
+                )
+                resets.append(until)
+                self._persist()
+                continue
+
+            total_tokens = 0
+            try:
+                async for event in stream:
+                    if event.usage is not None:
+                        total_tokens = event.usage.total_tokens or 0
+                        yield StreamChunk(
+                            delta="",
+                            provider=cfg.name,
+                            model=resolved_model,
+                            done=True,
+                            usage={
+                                "prompt_tokens": event.usage.prompt_tokens or 0,
+                                "completion_tokens": event.usage.completion_tokens
+                                or 0,
+                                "total_tokens": total_tokens,
+                            },
+                            raw=event,
+                        )
+                        continue
+                    delta = event.choices[0].delta.content if event.choices else None
+                    if delta:
+                        yield StreamChunk(
+                            delta=delta,
+                            provider=cfg.name,
+                            model=resolved_model,
+                            raw=event,
+                        )
+            except Exception as e:
+                raise ProviderError(cfg.name, "stream interrupted", e) from e
+            finally:
+                self.tracker.record(kid, cfg, now, tokens=total_tokens)
+                self._persist()
+            return
+
+        raise AllProvidersExhausted(statuses, min(resets) if resets else None)
+
     def status(self) -> dict[str, str]:
         """Current health of every configured key: 'ok' or the reason it's skipped."""
         now = self._now()
@@ -179,6 +286,29 @@ class Rotor:
         )
         return client.chat.completions.create(
             model=model, messages=messages, **request_kwargs
+        )
+
+    async def _call_stream(
+        self,
+        cfg: ProviderConfig,
+        key: str,
+        messages: list[dict[str, str]],
+        model: str,
+        request_kwargs: dict[str, Any],
+    ) -> Any:
+        client = openai.AsyncOpenAI(
+            api_key=key,
+            base_url=cfg.base_url,
+            timeout=self._timeout,
+            default_headers=cfg.extra_headers or None,
+            max_retries=0,  # the rotor owns retry behaviour
+        )
+        return await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=True,
+            stream_options={"include_usage": True},
+            **request_kwargs,
         )
 
     def _persist(self) -> None:
