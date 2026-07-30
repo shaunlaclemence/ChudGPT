@@ -34,7 +34,7 @@ class Model(str, Enum):
     GEMINI_3_1_FLASH_LITE = "gemini-3.1-flash-lite"
     GEMINI_2_5_PRO = "gemini-2.5-pro"
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
-    # GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite" Deprecated
+    GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
     GROQ_LLAMA_3_3_70B_VERSATILE = "llama-3.3-70b-versatile"
     GROQ_LLAMA_3_1_8B_INSTANT = "llama-3.1-8b-instant"
     MISTRAL_LARGE_LATEST = "mistral-large-latest"

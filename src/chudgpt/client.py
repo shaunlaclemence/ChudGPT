@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from typing import Any
 
-from .config import PROVIDERS, ProviderConfig
+from .config import PROVIDERS, TIERS, ProviderConfig, provider_by_name
+from .errors import InvalidTierError
 from .keystore import load_keys_from_secrets_json
 from .rotor import KeyUsage, Response, Rotor, StreamChunk
 
@@ -84,14 +85,18 @@ class Conversation:
 
 
 class ChudClient:
-    """Entry point: wraps Rotor with a conversation-friendly API.
-
-    chudgpt version 0.2.1 (see pyproject.toml — bump both together on release).
+    """ChudGPT v0.2.2
 
     Keys are resolved in this order: an explicit ``keys`` dict, a ``secrets_path``
     pointing at a per-account key inventory file (e.g. ``secrets.json`` — never
     commit it), or — if neither is given — environment variables /
     ``~/.chudgpt/keys.json`` via ``Rotor.from_env()``.
+
+    ``providers`` narrows and orders which providers may serve a request. Pass
+    plain names (``providers=["gemini"]``) — needed when pinning ``model=``, since
+    a model id is only valid for the provider that defines it.
+
+    Every failure raised from here derives from ``ChudGPTError``.
     """
 
     def __init__(
@@ -99,24 +104,34 @@ class ChudClient:
         keys: dict[str, list[str]] | None = None,
         *,
         secrets_path: Path | str | None = None,
-        providers: tuple[ProviderConfig, ...] = PROVIDERS,
+        providers: Sequence[str | ProviderConfig] = PROVIDERS,
         state_file: Path | str | None = None,
         tier: str = "fast",
         model: str | None = None,
         **rotor_kwargs: Any,
     ):
-        if keys is None and secrets_path is not None:
-            keys = load_keys_from_secrets_json(secrets_path)
+        resolved = tuple(
+            p if isinstance(p, ProviderConfig) else provider_by_name(p)
+            for p in providers
+        )
+        self._validate_tier(tier)
         self._tier = tier
         self._model = model
+        if keys is None and secrets_path is not None:
+            keys = load_keys_from_secrets_json(secrets_path)
         if keys is not None:
             self._rotor = Rotor(
-                keys, providers=providers, state_file=state_file, **rotor_kwargs
+                keys, providers=resolved, state_file=state_file, **rotor_kwargs
             )
         else:
             self._rotor = Rotor.from_env(
-                providers=providers, state_file=state_file, **rotor_kwargs
+                providers=resolved, state_file=state_file, **rotor_kwargs
             )
+
+    @staticmethod
+    def _validate_tier(tier: str | None) -> None:
+        if tier is not None and tier not in TIERS:
+            raise InvalidTierError(tier, list(TIERS))
 
     def status(self) -> dict[str, str]:
         return self._rotor.status()
@@ -135,6 +150,7 @@ class ChudClient:
         **request_kwargs: Any,
     ) -> Response:
         """One-shot, non-streaming turn. Mirrors Rotor.chat()'s full signature."""
+        self._validate_tier(tier)
         return self._rotor.chat(
             prompt,
             messages=messages,
@@ -153,6 +169,7 @@ class ChudClient:
         **request_kwargs: Any,
     ) -> AsyncIterator[StreamChunk]:
         """One-shot streaming turn (no history kept). Mirrors Rotor.chat_stream()."""
+        self._validate_tier(tier)
         return self._rotor.chat_stream(
             prompt,
             messages=messages,
@@ -168,6 +185,7 @@ class ChudClient:
         tier: str | None = None,
         model: str | None = None,
     ) -> Conversation:
+        self._validate_tier(tier)
         return Conversation(
             self._rotor,
             tier=tier or self._tier,

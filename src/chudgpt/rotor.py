@@ -11,13 +11,30 @@ from typing import Any
 import openai
 
 from .config import PROVIDERS, ProviderConfig
-from .errors import AllProvidersExhausted, ConfigError, ProviderError
+from .errors import (
+    AllProvidersExhausted,
+    ConfigError,
+    InvalidRequestError,
+    ProviderError,
+    StreamInterrupted,
+)
 from .keystore import key_id, load_keys
 from .quota import QuotaTracker, next_reset
 from .state import load_state, save_state
 
 TRANSIENT_COOLDOWN_S = 60  # 5xx / network blip: retry this key after a minute
 AUTH_FAILURE_COOLDOWN_S = 24 * 3600  # bad key: park it for a day instead of hammering
+
+
+def _is_bad_key_400(exc: openai.BadRequestError) -> bool:
+    """Whether a 400 is really an auth failure in disguise.
+
+    Gemini answers an invalid API key with 400 INVALID_ARGUMENT rather than the
+    401 the openai client maps to AuthenticationError, so the status code alone
+    can't distinguish "your key is junk" (rotate to the next key) from "your
+    request is malformed" (rotating won't help).
+    """
+    return "api key" in str(exc).lower()
 
 
 @dataclass
@@ -102,7 +119,7 @@ class Rotor:
     ) -> Response:
         """Send a chat completion, rotating to the next healthy key on quota errors."""
         if (prompt is None) == (messages is None):
-            raise ValueError("pass exactly one of `prompt` or `messages`")
+            raise InvalidRequestError("pass exactly one of `prompt` or `messages`")
         if messages is None:
             messages = [{"role": "user", "content": prompt}]
 
@@ -132,6 +149,19 @@ class Rotor:
                 until = now + timedelta(seconds=AUTH_FAILURE_COOLDOWN_S)
                 self.tracker.mark_exhausted(kid, cfg, now, until)
                 statuses[kid] = "authentication failed (bad key?)"
+            except openai.NotFoundError as e:
+                # pinned a model this provider doesn't serve — a caller error that
+                # rotating cannot fix
+                raise InvalidRequestError(f"[{cfg.name}] {e}") from e
+            except openai.BadRequestError as e:
+                if not _is_bad_key_400(e):
+                    # malformed request (bad kwarg, bad message shape): every
+                    # provider will reject it identically, so fail loudly instead
+                    # of burning the whole key pool on a caller error.
+                    raise InvalidRequestError(f"[{cfg.name}] {e}") from e
+                until = now + timedelta(seconds=AUTH_FAILURE_COOLDOWN_S)
+                self.tracker.mark_exhausted(kid, cfg, now, until)
+                statuses[kid] = "authentication failed (bad key?)"
             except (openai.APIConnectionError, openai.InternalServerError) as e:
                 until = now + timedelta(seconds=TRANSIENT_COOLDOWN_S)
                 self.tracker.mark_exhausted(kid, cfg, now, until)
@@ -139,6 +169,10 @@ class Rotor:
                     f"transient error ({type(e).__name__}), retrying in {TRANSIENT_COOLDOWN_S}s"
                 )
                 resets.append(until)
+            except openai.OpenAIError as e:
+                # anything else the client can raise stays inside the ChudGPTError
+                # hierarchy rather than leaking a raw openai exception to callers
+                raise ProviderError(cfg.name, str(e), e) from e
             else:
                 usage = getattr(result, "usage", None)
                 total_tokens = getattr(usage, "total_tokens", 0) or 0
@@ -173,10 +207,10 @@ class Rotor:
 
         Rotation only happens before the first chunk of a stream is yielded — once
         content has reached the caller, a mid-stream failure is raised as
-        ``ProviderError`` rather than silently retried (that would duplicate output).
+        ``StreamInterrupted`` rather than silently retried (would duplicate output).
         """
         if (prompt is None) == (messages is None):
-            raise ValueError("pass exactly one of `prompt` or `messages`")
+            raise InvalidRequestError("pass exactly one of `prompt` or `messages`")
         if messages is None:
             messages = [{"role": "user", "content": prompt}]
 
@@ -209,6 +243,19 @@ class Rotor:
                 until = now + timedelta(seconds=AUTH_FAILURE_COOLDOWN_S)
                 self.tracker.mark_exhausted(kid, cfg, now, until)
                 statuses[kid] = "authentication failed (bad key?)"
+            except openai.NotFoundError as e:
+                # pinned a model this provider doesn't serve — a caller error that
+                # rotating cannot fix
+                raise InvalidRequestError(f"[{cfg.name}] {e}") from e
+            except openai.BadRequestError as e:
+                if not _is_bad_key_400(e):
+                    # malformed request (bad kwarg, bad message shape): every
+                    # provider will reject it identically, so fail loudly instead
+                    # of burning the whole key pool on a caller error.
+                    raise InvalidRequestError(f"[{cfg.name}] {e}") from e
+                until = now + timedelta(seconds=AUTH_FAILURE_COOLDOWN_S)
+                self.tracker.mark_exhausted(kid, cfg, now, until)
+                statuses[kid] = "authentication failed (bad key?)"
                 self._persist()
                 continue
             except (openai.APIConnectionError, openai.InternalServerError) as e:
@@ -218,6 +265,10 @@ class Rotor:
                     f"transient error ({type(e).__name__}), retrying in {TRANSIENT_COOLDOWN_S}s"
                 )
                 resets.append(until)
+            except openai.OpenAIError as e:
+                # anything else the client can raise stays inside the ChudGPTError
+                # hierarchy rather than leaking a raw openai exception to callers
+                raise ProviderError(cfg.name, str(e), e) from e
                 self._persist()
                 continue
 
@@ -249,7 +300,7 @@ class Rotor:
                             raw=event,
                         )
             except Exception as e:
-                raise ProviderError(cfg.name, "stream interrupted", e) from e
+                raise StreamInterrupted(cfg.name, e) from e
             finally:
                 self.tracker.record(kid, cfg, now, tokens=total_tokens)
                 self._persist()

@@ -22,7 +22,7 @@ def test_gemini_2_5_flash():
     client = ChudClient(secrets_path=SECRETS_PATH)
     reply = client.ask(
         "Summarize Homer's The Odyssey in three sentences.",
-        model=Model.GEMINI_3_1_FLASH_LITE,
+        model=Model.GEMINI_3_5_FLASH_LITE,
     )
     print(f"\n[{reply.provider}/{reply.model}]\n{reply.text}\n")
     print(f"usage: {reply.usage}")

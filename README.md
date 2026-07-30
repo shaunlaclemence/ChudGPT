@@ -15,28 +15,59 @@ cp .env.example .env  # fill in whichever keys you have
 ```
 
 ```python
-from chudgpt import Rotor, AllProvidersExhausted
+from chudgpt import ChudClient, AllProvidersExhausted
 
-rotor = Rotor.from_env()          # discovers keys from env vars
+client = ChudClient()             # discovers keys from env vars
 
-reply = rotor.chat("Explain monads in one paragraph.")
+reply = client.ask("Explain monads in one paragraph.")
 print(reply.text)                 # the answer
 print(reply.provider, reply.model)  # who actually served it
 
-reply = rotor.chat(
+reply = client.ask(
     messages=[{"role": "user", "content": "hi"}],
     tier="best",                  # "best" | "fast" (default), or pass model="..."
     temperature=0.2,              # extra kwargs pass through to the API
 )
 
 try:
-    rotor.chat("...")
+    client.ask("...")
 except AllProvidersExhausted as e:
     print(e.statuses)             # why each key is unavailable
     print(e.earliest_reset)       # when to try again
 
-print(rotor.status())             # health of every key right now
+print(client.status())            # health of every key right now
+print(client.usage())             # requests/tokens used today, % of daily cap
 ```
+
+## Public API
+
+`ChudClient` is the entry point — you shouldn't need anything else. Also exported:
+the `Tier`/`Model`/`Temperature` enums, the result types (`Response`, `StreamChunk`,
+`KeyUsage`, `Conversation`), and the exception hierarchy below.
+
+Everything else (`Rotor`, `PROVIDERS`, `ProviderConfig`, `QuotaTracker`, keystore
+and state helpers) is internal — still reachable via submodules if you need it, but
+not part of the supported surface and free to change between versions.
+
+### Errors
+
+Every failure derives from `ChudGPTError`, so one `except` clause is exhaustive:
+
+```
+ChudGPTError
+├── ConfigError               bad/missing configuration
+│   ├── SecretsFileError      secrets file unreadable, malformed, or empty
+│   └── UnknownProviderError  provider name not in the registry
+├── InvalidRequestError       caller error — rotating wouldn't help
+│   └── InvalidTierError      tier isn't "best" or "fast"
+├── ProviderError             a single provider call failed
+│   └── StreamInterrupted     stream died after content was already yielded
+└── AllProvidersExhausted     every key rate-limited, exhausted, or failing
+```
+
+`InvalidRequestError` covers caller mistakes that no amount of failover can fix —
+an unknown pinned model, an out-of-range `temperature`, passing both `prompt` and
+`messages`. These raise immediately rather than burning through your key pool.
 
 ## How it works
 
@@ -98,13 +129,20 @@ quality/speed tradeoff instead of naming an exact model:
 ```python
 from chudgpt import ChudClient, Model, Tier
 
+client = ChudClient(secrets_path="secrets.json", providers=["gemini"])
 reply = client.ask("hi", model=Model.GEMINI_3_6_FLASH)  # exact model
 reply = client.ask("hi", tier=Tier.BEST)                # provider's default "best" model
 ```
 
-Pin `model=` only when you've also constrained `providers=` to the one provider that serves
-it — a request that rotates to a different provider won't recognize another provider's model
-id.
+Pin `model=` only alongside `providers=["<that provider>"]` — a model id is only valid for
+the provider that defines it, so a request that rotates elsewhere raises
+`InvalidRequestError`. Pass `providers=` plain names; it also sets failover order.
+
+Model ids drift: Google is retiring the `gemini-2.5-*` line ("no longer available to new
+users"), which is why the Gemini tier defaults point at `gemini-3.6-flash` and
+`gemini-3.5-flash-lite`. If a pinned model starts raising `InvalidRequestError`, check
+`src/chudgpt/config.json` against the provider's current docs and regenerate:
+`uv run python scripts/generate_params.py`.
 
 ## Terms-of-service note
 

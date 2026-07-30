@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from importlib import resources
 from typing import Literal
 
+from .errors import InvalidTierError, UnknownProviderError
+
 ResetPolicy = Literal["midnight_pt", "rolling"]
 
 TIERS = ("best", "fast")
@@ -36,10 +38,7 @@ class ProviderConfig:
         try:
             return self.models[tier]
         except KeyError:
-            raise KeyError(
-                f"provider {self.name!r} has no model for tier {tier!r}; "
-                f"available: {sorted(self.models)}"
-            ) from None
+            raise InvalidTierError(tier, list(self.models)) from None
 
 
 PROVIDERS: tuple[ProviderConfig, ...] = (
@@ -47,7 +46,9 @@ PROVIDERS: tuple[ProviderConfig, ...] = (
         name="gemini",
         base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         env_var="GEMINI_API_KEY",
-        models={"best": "gemini-2.5-pro", "fast": "gemini-2.5-flash"},
+        # 2.5-era models are being retired ("no longer available to new users") and
+        # 2.5-pro's free RPD is tiny, so the tier defaults point at the 3.x line.
+        models={"best": "gemini-3.6-flash", "fast": "gemini-3.5-flash-lite"},
         priority=10,
         known_rpd=1500,
         reset="midnight_pt",
@@ -97,7 +98,7 @@ def provider_by_name(
     for p in providers:
         if p.name == name:
             return p
-    raise KeyError(f"unknown provider {name!r}")
+    raise UnknownProviderError(name, [p.name for p in providers])
 
 
 def load_model_catalog() -> dict[str, list[str]]:

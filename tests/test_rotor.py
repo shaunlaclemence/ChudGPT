@@ -5,7 +5,7 @@ import respx
 from conftest import completion_json
 from httpx import Response as HttpResponse
 
-from chudgpt.errors import AllProvidersExhausted
+from chudgpt.errors import AllProvidersExhausted, InvalidRequestError
 from chudgpt.rotor import Rotor
 
 KEYS = {"alpha": ["sk-alpha"], "beta": ["sk-beta"]}
@@ -163,7 +163,7 @@ def test_usage_reports_percent_of_known_daily_cap(providers, tmp_path, now):
 
 def test_explicit_model_and_bad_args(providers, tmp_path, now):
     rotor = make_rotor(providers, tmp_path, now)
-    with pytest.raises(ValueError):
+    with pytest.raises(InvalidRequestError):
         rotor.chat()  # neither prompt nor messages
-    with pytest.raises(ValueError):
+    with pytest.raises(InvalidRequestError):
         rotor.chat("hi", messages=[{"role": "user", "content": "hi"}])  # both

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import PROVIDERS, ProviderConfig
-from .errors import ConfigError
+from .errors import ConfigError, SecretsFileError
 
 DEFAULT_KEYS_FILE = Path.home() / ".chudgpt" / "keys.json"
 
@@ -44,17 +44,24 @@ def load_keys_from_secrets_json(path: Path | str) -> dict[str, list[str]]:
     try:
         raw = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as e:
-        raise ConfigError(f"could not read secrets file {path}: {e}") from e
+        raise SecretsFileError(str(path), str(e)) from e
 
     keys: dict[str, list[str]] = {}
-    for provider, entries in raw.items():
-        parsed = [KeyConfig(**entry) for entry in entries]
-        chosen = [kc.api_key for kc in parsed if kc.api_key]
-        if chosen:
-            keys[provider] = chosen
+    try:
+        for provider, entries in raw.items():
+            parsed = [KeyConfig(**entry) for entry in entries]
+            chosen = [kc.api_key for kc in parsed if kc.api_key]
+            if chosen:
+                keys[provider] = chosen
+    except (AttributeError, TypeError) as e:
+        raise SecretsFileError(
+            str(path),
+            "expected {provider: [{account, name, project_name, project_number, "
+            f"api_key}}, ...]}} entries ({e})",
+        ) from e
 
     if not keys:
-        raise ConfigError(f"no API keys found in {path}")
+        raise SecretsFileError(str(path), "no API keys found")
     return keys
 
 
