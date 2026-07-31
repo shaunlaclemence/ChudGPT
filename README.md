@@ -22,6 +22,7 @@ client = ChudClient()             # discovers keys from env vars
 reply = client.ask("Explain monads in one paragraph.")
 print(reply.text)                 # the answer
 print(reply.provider, reply.model)  # who actually served it
+print(reply.key_id)               # which key served it — index into client.usage()
 
 reply = client.ask(
     messages=[{"role": "user", "content": "hi"}],
@@ -143,6 +144,18 @@ users"), which is why the Gemini tier defaults point at `gemini-3.6-flash` and
 `gemini-3.5-flash-lite`. If a pinned model starts raising `InvalidRequestError`, check
 `src/chudgpt/config.json` against the provider's current docs and regenerate:
 `uv run python scripts/generate_params.py`.
+
+## Speed benchmark
+
+Times every model in the catalog against the same prompt, one streaming call each,
+reporting time-to-first-token, total latency, tokens/sec and usage. Opt-in, since it
+costs one real request per model:
+
+```bash
+CHUDGPT_SPEED=1 uv run pytest tests/test_live_speed.py -s
+```
+
+Models your account can't reach are listed as unavailable rather than failing the run.
 
 ## Terms-of-service note
 

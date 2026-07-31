@@ -37,8 +37,10 @@ def test_usage_reports_limits_progress_and_provider():
     print(f"tokens this call: {reply.usage}")
 
     usage = client.usage()
-    served_kid = next(kid for kid, u in usage.items() if u.provider == reply.provider)
-    served = usage[served_kid]
+    # use the key that actually served this call — picking the first key of the
+    # provider is wrong as soon as rotation moves off key #1
+    served = usage[reply.key_id]
+    assert served.provider == reply.provider
 
     print("\ncurrent limits / progress per key:")
     for kid, u in usage.items():

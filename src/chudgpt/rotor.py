@@ -42,6 +42,7 @@ class Response:
     text: str
     provider: str
     model: str
+    key_id: str = ""  # which key served it, e.g. "gemini:1e3ff2cc" — never the key itself
     usage: dict[str, int] = field(default_factory=dict)
     raw: Any = None
 
@@ -51,6 +52,7 @@ class StreamChunk:
     delta: str
     provider: str
     model: str
+    key_id: str = ""  # which key served it, e.g. "gemini:1e3ff2cc" — never the key itself
     done: bool = False
     usage: dict[str, int] | None = None
     raw: Any = None
@@ -181,6 +183,7 @@ class Rotor:
                     text=result.choices[0].message.content or "",
                     provider=cfg.name,
                     model=result.model,
+                    key_id=kid,
                     usage={
                         "prompt_tokens": getattr(usage, "prompt_tokens", 0) or 0,
                         "completion_tokens": getattr(usage, "completion_tokens", 0)
@@ -243,6 +246,8 @@ class Rotor:
                 until = now + timedelta(seconds=AUTH_FAILURE_COOLDOWN_S)
                 self.tracker.mark_exhausted(kid, cfg, now, until)
                 statuses[kid] = "authentication failed (bad key?)"
+                self._persist()
+                continue
             except openai.NotFoundError as e:
                 # pinned a model this provider doesn't serve — a caller error that
                 # rotating cannot fix
@@ -265,38 +270,37 @@ class Rotor:
                     f"transient error ({type(e).__name__}), retrying in {TRANSIENT_COOLDOWN_S}s"
                 )
                 resets.append(until)
+                self._persist()
+                continue
             except openai.OpenAIError as e:
                 # anything else the client can raise stays inside the ChudGPTError
                 # hierarchy rather than leaking a raw openai exception to callers
                 raise ProviderError(cfg.name, str(e), e) from e
-                self._persist()
-                continue
 
             total_tokens = 0
+            usage: dict[str, int] | None = None
+            last_event: Any = None
             try:
                 async for event in stream:
+                    # usage is NOT an end-of-stream marker: OpenAI sends it once in a
+                    # final choices-less chunk, but Gemini attaches it to every chunk
+                    # — including ones carrying text. Record it and keep going, or
+                    # content gets swallowed.
                     if event.usage is not None:
                         total_tokens = event.usage.total_tokens or 0
-                        yield StreamChunk(
-                            delta="",
-                            provider=cfg.name,
-                            model=resolved_model,
-                            done=True,
-                            usage={
-                                "prompt_tokens": event.usage.prompt_tokens or 0,
-                                "completion_tokens": event.usage.completion_tokens
-                                or 0,
-                                "total_tokens": total_tokens,
-                            },
-                            raw=event,
-                        )
-                        continue
+                        usage = {
+                            "prompt_tokens": event.usage.prompt_tokens or 0,
+                            "completion_tokens": event.usage.completion_tokens or 0,
+                            "total_tokens": total_tokens,
+                        }
+                    last_event = event
                     delta = event.choices[0].delta.content if event.choices else None
                     if delta:
                         yield StreamChunk(
                             delta=delta,
                             provider=cfg.name,
                             model=resolved_model,
+                            key_id=kid,
                             raw=event,
                         )
             except Exception as e:
@@ -304,6 +308,16 @@ class Rotor:
             finally:
                 self.tracker.record(kid, cfg, now, tokens=total_tokens)
                 self._persist()
+            # exactly one terminal chunk, once the stream is actually done
+            yield StreamChunk(
+                delta="",
+                provider=cfg.name,
+                model=resolved_model,
+                key_id=kid,
+                done=True,
+                usage=usage,
+                raw=last_event,
+            )
             return
 
         raise AllProvidersExhausted(statuses, min(resets) if resets else None)

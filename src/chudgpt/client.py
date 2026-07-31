@@ -52,6 +52,7 @@ class Conversation:
                 self.last_meta = {
                     "provider": chunk.provider,
                     "model": chunk.model,
+                    "key_id": chunk.key_id,
                     "usage": chunk.usage,
                 }
                 continue
@@ -79,6 +80,7 @@ class Conversation:
         self.last_meta = {
             "provider": reply.provider,
             "model": reply.model,
+            "key_id": reply.key_id,
             "usage": reply.usage,
         }
         return reply

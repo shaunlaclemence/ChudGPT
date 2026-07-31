@@ -78,6 +78,35 @@ async def test_stream_yields_deltas_and_final_usage(providers, tmp_path, now):
 
 
 @pytest.mark.anyio
+async def test_stream_yields_content_when_usage_rides_along(providers, tmp_path, now):
+    """Usage on a content chunk must not be mistaken for end-of-stream.
+
+    OpenAI sends usage once in a trailing choices-less chunk, but Gemini attaches
+    it to every chunk — including ones carrying text. Treating "has usage" as
+    "done" silently swallowed all content against Gemini.
+    """
+    usage = {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}
+    body = sse(
+        chunk("alpha-small", content="he", usage=usage),
+        chunk("alpha-small", content="llo", usage=usage),
+        chunk("alpha-small", usage=usage),
+    )
+    with respx.mock:
+        respx.post(ALPHA_URL).mock(
+            return_value=HttpResponse(
+                200, content=body, headers={"content-type": "text/event-stream"}
+            )
+        )
+        rotor = make_rotor(providers, tmp_path, now)
+        deltas, finals = [], []
+        async for c in rotor.chat_stream("hi"):
+            (finals if c.done else deltas).append(c)
+        assert "".join(d.delta for d in deltas) == "hello"
+        assert len(finals) == 1, "exactly one terminal chunk"
+        assert finals[0].usage["total_tokens"] == 5
+
+
+@pytest.mark.anyio
 async def test_stream_rotates_to_next_provider_on_429(providers, tmp_path, now):
     with respx.mock:
         respx.post(ALPHA_URL).mock(
