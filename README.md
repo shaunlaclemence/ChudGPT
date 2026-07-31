@@ -145,6 +145,28 @@ users"), which is why the Gemini tier defaults point at `gemini-3.6-flash` and
 `src/chudgpt/config.json` against the provider's current docs and regenerate:
 `uv run python scripts/generate_params.py`.
 
+## Audio & transcription
+
+`client.transcribe()` sends an audio clip plus a prompt as one chat turn and returns
+the reply. It's an ordinary chat completion with the audio attached — so the output
+is whatever the prompt asks for (a plain transcript, diarized JSON, a summary), not a
+fixed transcription format. The call is restricted to audio-capable providers
+(`config.AUDIO_PROVIDERS` — Gemini today) so a Gemini-only model isn't sent to a
+text-only key.
+
+```python
+reply = client.transcribe(
+    "meeting.mp3",                     # a path, or raw bytes + audio_format="mp3"
+    prompt="Transcribe this call. Return JSON: {segments:[{speaker,text}]}.",
+)
+print(reply.text)                      # the model's answer, shaped by your prompt
+print(reply.provider, reply.key_id)    # who served it
+```
+
+The clip is inlined as base64 over the provider's OpenAI-compatible endpoint, so keep
+each call within that provider's request-size limit — chunk long recordings and
+transcribe the pieces. Same rotation, quota tracking and error hierarchy as `ask()`.
+
 ## Speed benchmark
 
 Times every model in the catalog against the same prompt, one streaming call each,

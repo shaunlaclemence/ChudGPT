@@ -91,6 +91,12 @@ PROVIDERS: tuple[ProviderConfig, ...] = (
     ),
 )
 
+# Providers whose OpenAI-compatible endpoint accepts audio input (as
+# ``input_audio`` content parts). ChudClient.transcribe() restricts a call to
+# these so a gemini-only model isn't sent to a text-only provider. Gemini is the
+# one that supports it today; extend as others do.
+AUDIO_PROVIDERS: tuple[str, ...] = ("gemini",)
+
 
 def provider_by_name(
     name: str, providers: tuple[ProviderConfig, ...] = PROVIDERS

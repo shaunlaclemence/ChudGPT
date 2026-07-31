@@ -2,14 +2,44 @@
 
 from __future__ import annotations
 
+import base64
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from typing import Any
 
-from .config import PROVIDERS, TIERS, ProviderConfig, provider_by_name
-from .errors import InvalidTierError
+from .config import AUDIO_PROVIDERS, PROVIDERS, TIERS, ProviderConfig, provider_by_name
+from .errors import InvalidRequestError, InvalidTierError
 from .keystore import load_keys_from_secrets_json
 from .rotor import KeyUsage, Response, Rotor, StreamChunk
+
+
+def _audio_message(
+    audio: bytes | str | Path, audio_format: str | None, prompt: str
+) -> dict[str, Any]:
+    """Build one user chat message carrying ``prompt`` plus an audio clip as an
+    ``input_audio`` content part (base64) — the shape an OpenAI-compatible endpoint
+    expects for audio input. ``audio`` may be raw bytes or a path; with bytes,
+    ``audio_format`` (e.g. ``"mp3"``) is required since there's no filename to read
+    it from."""
+    if isinstance(audio, (str, Path)):
+        path = Path(audio)
+        data = path.read_bytes()
+        fmt = (audio_format or path.suffix).lstrip(".").lower()
+    else:
+        data = audio
+        fmt = (audio_format or "").lstrip(".").lower()
+    if not fmt:
+        raise InvalidRequestError(
+            "audio_format is required when passing raw audio bytes"
+        )
+    encoded = base64.b64encode(data).decode("ascii")
+    return {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": prompt},
+            {"type": "input_audio", "input_audio": {"data": encoded, "format": fmt}},
+        ],
+    }
 
 
 class Conversation:
@@ -87,7 +117,7 @@ class Conversation:
 
 
 class ChudClient:
-    """ChudGPT v0.2.2
+    """ChudGPT v0.3.0
 
     Keys are resolved in this order: an explicit ``keys`` dict, a ``secrets_path``
     pointing at a per-account key inventory file (e.g. ``secrets.json`` — never
@@ -158,6 +188,41 @@ class ChudClient:
             messages=messages,
             tier=tier or self._tier,
             model=model or self._model,
+            **request_kwargs,
+        )
+
+    def transcribe(
+        self,
+        audio: bytes | str | Path,
+        *,
+        prompt: str,
+        audio_format: str | None = None,
+        providers: Sequence[str] | None = None,
+        tier: str | None = None,
+        model: str | None = None,
+        **request_kwargs: Any,
+    ) -> Response:
+        """Send an audio clip plus ``prompt`` as one chat turn and return the reply.
+
+        What comes back is whatever ``prompt`` asks for — a plain transcript, a
+        diarized JSON structure, a summary — because this is an ordinary chat
+        completion with the audio attached, not a fixed transcription endpoint. The
+        call is restricted to audio-capable providers (``config.AUDIO_PROVIDERS``,
+        Gemini by default) so a gemini-only model is never sent to a text-only key;
+        pass ``providers`` to override that set.
+
+        ``audio`` is raw bytes or a path (pass ``audio_format`` like ``"mp3"`` with
+        bytes). The clip is inlined as base64 over the provider's OpenAI-compatible
+        endpoint, so keep it within that provider's request-size limit — chunk long
+        recordings.
+        """
+        self._validate_tier(tier)
+        message = _audio_message(audio, audio_format, prompt)
+        return self._rotor.chat(
+            messages=[message],
+            tier=tier or self._tier,
+            model=model,
+            providers=providers or AUDIO_PROVIDERS,
             **request_kwargs,
         )
 

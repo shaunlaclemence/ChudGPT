@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -42,7 +42,9 @@ class Response:
     text: str
     provider: str
     model: str
-    key_id: str = ""  # which key served it, e.g. "gemini:1e3ff2cc" — never the key itself
+    key_id: str = (
+        ""  # which key served it, e.g. "gemini:1e3ff2cc" — never the key itself
+    )
     usage: dict[str, int] = field(default_factory=dict)
     raw: Any = None
 
@@ -52,7 +54,9 @@ class StreamChunk:
     delta: str
     provider: str
     model: str
-    key_id: str = ""  # which key served it, e.g. "gemini:1e3ff2cc" — never the key itself
+    key_id: str = (
+        ""  # which key served it, e.g. "gemini:1e3ff2cc" — never the key itself
+    )
     done: bool = False
     usage: dict[str, int] | None = None
     raw: Any = None
@@ -63,8 +67,12 @@ class KeyUsage:
     provider: str
     status: str  # "ok" or why it's currently skipped
     requests_today: int
-    known_rpd: int | None  # the provider's known daily cap, if any — a hint, not a guarantee
-    percent_used: float | None  # requests_today / known_rpd * 100, or None if known_rpd is unset
+    known_rpd: (
+        int | None
+    )  # the provider's known daily cap, if any — a hint, not a guarantee
+    percent_used: (
+        float | None
+    )  # requests_today / known_rpd * 100, or None if known_rpd is unset
     tokens_today: int
     resets_at: datetime
 
@@ -114,9 +122,10 @@ class Rotor:
         self,
         prompt: str | None = None,
         *,
-        messages: list[dict[str, str]] | None = None,
+        messages: list[dict[str, Any]] | None = None,
         tier: str = "fast",
         model: str | None = None,
+        providers: Sequence[str] | None = None,
         **request_kwargs: Any,
     ) -> Response:
         """Send a chat completion, rotating to the next healthy key on quota errors."""
@@ -128,7 +137,7 @@ class Rotor:
         statuses: dict[str, str] = {}
         resets: list[datetime] = []
 
-        for cfg, key in self._candidates(statuses, resets):
+        for cfg, key in self._candidates(statuses, resets, only=providers):
             kid = key_id(cfg.name, key)
             now = self._now()
             try:
@@ -201,9 +210,10 @@ class Rotor:
         self,
         prompt: str | None = None,
         *,
-        messages: list[dict[str, str]] | None = None,
+        messages: list[dict[str, Any]] | None = None,
         tier: str = "fast",
         model: str | None = None,
+        providers: Sequence[str] | None = None,
         **request_kwargs: Any,
     ) -> AsyncIterator[StreamChunk]:
         """Stream a chat completion, rotating to the next healthy key on quota errors.
@@ -220,7 +230,7 @@ class Rotor:
         statuses: dict[str, str] = {}
         resets: list[datetime] = []
 
-        for cfg, key in self._candidates(statuses, resets):
+        for cfg, key in self._candidates(statuses, resets, only=providers):
             kid = key_id(cfg.name, key)
             now = self._now()
             resolved_model = model or cfg.model_for(tier)
@@ -359,9 +369,20 @@ class Rotor:
                 )
         return report
 
-    def _candidates(self, statuses: dict[str, str], resets: list[datetime]):
-        """Yield (provider, key) pairs that are healthy right now, priority order."""
+    def _candidates(
+        self,
+        statuses: dict[str, str],
+        resets: list[datetime],
+        only: Sequence[str] | None = None,
+    ):
+        """Yield (provider, key) pairs that are healthy right now, priority order.
+
+        ``only`` narrows to a subset of provider names (e.g. the audio-capable ones
+        for a transcription call); None considers every configured provider."""
+        allowed = set(only) if only is not None else None
         for cfg in self.providers:
+            if allowed is not None and cfg.name not in allowed:
+                continue
             for key in self.keys.get(cfg.name, []):
                 kid = key_id(cfg.name, key)
                 now = self._now()
@@ -376,7 +397,7 @@ class Rotor:
         self,
         cfg: ProviderConfig,
         key: str,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         model: str,
         request_kwargs: dict[str, Any],
     ) -> Any:
@@ -395,7 +416,7 @@ class Rotor:
         self,
         cfg: ProviderConfig,
         key: str,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         model: str,
         request_kwargs: dict[str, Any],
     ) -> Any:
