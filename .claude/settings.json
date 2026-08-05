@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import json,sys,subprocess,os\nd=json.load(sys.stdin)\nf=(d.get('tool_input') or {}).get('file_path') or (d.get('tool_response') or {}).get('filePath')\nruff=os.path.join('.venv','Scripts','ruff.exe')\nif f and f.endswith('.py'):\n    subprocess.run([ruff,'check','--fix','--select','I','--quiet',f])\n    subprocess.run([ruff,'format','--quiet',f])\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}

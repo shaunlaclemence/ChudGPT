@@ -1,9 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
-Message = dict[str, Any]
+from pydantic import BaseModel
+
+
+class MessageRole(str, Enum):
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
+@dataclass
+class Message:
+    role: MessageRole
+    content: Any
 
 
 @dataclass(frozen=True)
@@ -38,8 +51,7 @@ class Usage:
         )
 
 
-@dataclass(repr=False)
-class Provider:
+class Provider(BaseModel):
     account: str
     name: str
     project_name: str
@@ -71,7 +83,7 @@ class Response:
 
     @property
     def message(self) -> Message:
-        return {"role": "assistant", "content": self.text}
+        return Message(role=MessageRole.ASSISTANT, content=self.text)
 
     def __repr__(self) -> str:
         return "\n".join(

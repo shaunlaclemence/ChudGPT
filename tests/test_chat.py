@@ -1,9 +1,10 @@
 import asyncio
 from pathlib import Path
 
-from chudgpt.client import ChudGPT
-from chudgpt.providers.gemini import GeminiModel
 import pytest
+
+from chudgpt.client import ChudGPT, MessageBuilder
+from chudgpt.providers.gemini import GeminiModel
 
 SECRETS_PATH = Path(__file__).resolve().parent.parent / "secrets.json"
 
@@ -11,13 +12,14 @@ SECRETS_PATH = Path(__file__).resolve().parent.parent / "secrets.json"
 def get_chud():
     return ChudGPT(secrets_path=SECRETS_PATH)
 
+
 @pytest.mark.skip()
 def test_chat_simple():
     chud = get_chud()
     response = asyncio.run(
         chud.chat(
-            "generate a random image",
-            system="",
+            "explain the odyssey",
+            system="use 1 sentence only",
             model=GeminiModel.FLASH_LITE_3_5,
         )
     )
@@ -31,20 +33,19 @@ def test_chat_simple():
     assert response.usage.prompt > 0
     assert response.usage.total >= response.usage.prompt + response.usage.completion
 
-def test_chat_usage():
+
+def test_chat_with_history():
     chud = get_chud()
-    model = GeminiModel.FLASH_LITE_3_1
     response = asyncio.run(
         chud.chat(
-            "explain the odyssey",
-            system="use 1 sentence only",
-            model=model,
+            builder=MessageBuilder()
+            .system(
+                "you are a greek military commander, your crucial mission is to live and die protecting and fighting for greece and against its enemies, and keep its secrets and strategies unkown to troy. i am a military commander of the trojan army and an enemy of greece, the greeks have just ended the war and fled after sieging my city for 10 years. Try to be concise"
+            )
+            .prompt(
+                "Hi, whats this horse yall left on the beach, its really nice. suckers, we are gonna display it at the temple of athena"
+            ),
+            model=GeminiModel.FLASH_LITE_3_1,
         )
     )
-
     print(response)
-
-    usage = asyncio.run(
-        chud.usage(model=model)
-    )
-    print(usage)

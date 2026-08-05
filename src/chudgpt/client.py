@@ -1,12 +1,35 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from .db.models import ModelQuota
 from .providers.gemini import GeminiModel
 from .rotor import Rotor
-from .schemas.chat import Message, Response
+from .schemas.chat import Message, MessageRole, Response
 from .utils.keys import load_secrets
+
+
+class MessageBuilder:
+    def __init__(self) -> None:
+        self.messages_list: list[Message] = []
+
+    def system(self, content: Any):
+        if len(self.messages_list) > 0:
+            raise ValueError("System must be the first message")
+        self.messages_list.append(Message(role=MessageRole.SYSTEM, content=content))
+        return self
+
+    def prompt(self, content: Any):
+        self.messages_list.append(Message(role=MessageRole.USER, content=content))
+        return self
+
+    def assistant(self, content: Any):
+        self.messages_list.append(Message(role=MessageRole.ASSISTANT, content=content))
+        return self
+
+    def messages(self, messages: list[Message]):
+        self.messages_list += messages
+        return self
 
 
 class ChudGPT:
@@ -19,16 +42,16 @@ class ChudGPT:
         *,
         messages: list[Message] | None = None,
         system: str | None = None,
+        builder: MessageBuilder | None = None,
         model: GeminiModel | None = None,
     ) -> Response:
-        return await self._rotor.chat(
-            prompt, messages=messages, system=system, model=model
-        )
-
-    async def usage(self, model: GeminiModel | None = None) -> ModelQuota | None:
-        """Today's stored spend for the current provider and model.
-
-        @param model: which model's row to read; defaults to the model ``chat()``
-            would pick, so a bare call describes the next request.
-        """
-        return await self._rotor.usage(model)
+        if builder:
+            if prompt is not None or messages is not None or system is not None:
+                raise ValueError(
+                    "pass builder on its own, not alongside prompt/messages/system"
+                )
+            return await self._rotor.chat(messages=builder.messages_list, model=model)
+        else:
+            return await self._rotor.chat(
+                prompt, messages=messages, system=system, model=model
+            )
