@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 
 from chudgpt.db.db_initialiser import DBInitialiser
 from chudgpt.db.exceptions import db_exception_handler
-from chudgpt.db.models import ModelQuota, ModelUsage
+from chudgpt.db.models import Meta, ModelQuota, ModelUsage
 from chudgpt.schemas.chat import Usage
 
 
@@ -30,6 +30,26 @@ class DBController:
                         total_tokens=usage.total,
                     )
                 )
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
+
+    @db_exception_handler
+    def get_meta(self, key: str) -> str | None:
+        with self.__db() as db:
+            row = db.get(Meta, key)
+            return row.value if row else None
+
+    @db_exception_handler
+    def set_meta(self, key: str, value: str) -> None:
+        with self.__db() as db:
+            try:
+                row = db.get(Meta, key)
+                if row:
+                    row.value = value
+                else:
+                    db.add(Meta(key=key, value=value))
                 db.commit()
             except Exception:
                 db.rollback()

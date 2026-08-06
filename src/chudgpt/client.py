@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from chudgpt.scheduler import DailyScheduler
+
 from .providers.gemini import GeminiModel
 from .rotor import Rotor
 from .schemas.chat import Message, MessageRole, Response
@@ -35,6 +37,7 @@ class MessageBuilder:
 class ChudGPT:
     def __init__(self, secrets_path: Path | str, timeout: float = 30.0):
         self._rotor = Rotor(load_secrets(secrets_path), timeout=timeout)
+        self.scheduler = DailyScheduler()
 
     async def chat(
         self,

@@ -4,13 +4,15 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+from importlib import resources
 from pathlib import Path
 
-from sqlalchemy import create_engine, delete, text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import create_engine, delete
+from sqlalchemy.orm import sessionmaker
 
 from chudgpt.db.exceptions import db_exception_handler
-from chudgpt.db.models import Base, ModelQuota, ModelUsage, Provider
+from chudgpt.db.models import Base, ModelQuota, Provider
+from chudgpt.paths import db_path
 from chudgpt.schemas.chat import Provider as ProviderDTO
 from chudgpt.schemas.quota import Quota
 
@@ -37,25 +39,20 @@ class DBInitialiser:
         return d
 
     def __init_store(self):
-        """Initalise .chudgpt and chudgpt.db, Idempotent"""
-        self.root = Path(__file__).resolve().parent.parent.parent.parent
-        new_folder = self.root / ".chudgpt"
-        new_folder.mkdir(parents=True, exist_ok=True)
-
-        self.db_path = new_folder / "chudgpt.db"
+        """Initalise the user data dir and chudgpt.db, Idempotent"""
+        self.db_path = db_path()
         connection = sqlite3.connect(self.db_path)
         connection.close()
 
     def __init_tables(self):
         if not self.db_path:
             raise ValueError("db not initialised")
-        self.engine = create_engine(f"sqlite:///{self.db_path.resolve()}", echo=True)
+        self.engine = create_engine(f"sqlite:///{self.db_path.resolve()}")
         Base.metadata.create_all(self.engine)
 
     @db_exception_handler
-    def init_providers(self):
-        secrets_path = self.root / "secrets.json"
-        providers = self.__json_to_dict(secrets_path)
+    def init_providers(self, secrets_path: Path | str):
+        providers = self.__json_to_dict(Path(secrets_path))
         gemini_providers = [
             ProviderDTO(
                 account=p["account"],
@@ -89,8 +86,11 @@ class DBInitialiser:
 
     @db_exception_handler
     def init_quotas(self):
-        config_path = self.root / "src/chudgpt/config.json"
-        configs = self.__json_to_dict(config_path)
+        configs = json.loads(
+            resources.files("chudgpt").joinpath("config.json").read_text(
+                encoding="utf-8"
+            )
+        )
         gemini_configs = [
             Quota(slug=q["slug"], rpd=q["rpd"], rpm=q["rpm"], tpm=q["tpm"], inputs=q["inputs"])
             for q in configs["gemini"].values()
