@@ -1,11 +1,10 @@
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Protocol
+from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-
-from chudgpt.db.db_controller import DBController
 
 RESET_TZ = ZoneInfo("America/Los_Angeles")
 JOB_ID = "daily_reset"
@@ -30,9 +29,10 @@ class Controller(Protocol):
 
 
 class DailyScheduler:
-    def __init__(self, controller: Controller | None = None):
-        self._controller = controller or DBController()
+    def __init__(self, func: Callable[[], Any], controller: Controller):
+        self._controller = controller
         self._scheduler = BackgroundScheduler(timezone=RESET_TZ)
+        self._func = func
 
     @property
     def running(self):
@@ -58,11 +58,11 @@ class DailyScheduler:
         last = self.last_run
         return last is None or last < previous_fire_time()
 
-    def start(self, func):
+    def start(self):
         self._scheduler.add_job(
             self._run,
             CronTrigger(hour=0, minute=0, timezone=RESET_TZ),
-            args=[func],
+            args=[self._func],
             id=JOB_ID,
             coalesce=True,
             misfire_grace_time=None,
@@ -73,7 +73,7 @@ class DailyScheduler:
         if self.is_due:
             self._scheduler.add_job(
                 self._run,
-                args=[func],
+                args=[self._func],
                 id=CATCHUP_JOB_ID,
                 coalesce=True,
                 misfire_grace_time=None,
@@ -85,7 +85,7 @@ class DailyScheduler:
         if self._scheduler.running:
             self._scheduler.shutdown(wait=wait)
 
-    def _run(self, func):
+    def _run(self, func: Callable[[], Any]) -> None:
         try:
             func()
         finally:

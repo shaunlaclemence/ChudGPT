@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from chudgpt.db.db_controller import DBController
 from chudgpt.scheduler import DailyScheduler
 
 from .paths import set_app_name
@@ -43,8 +44,15 @@ class ChudGPT:
         app_name: str | None = None,
     ):
         set_app_name(app_name)
-        self._rotor = Rotor(load_secrets(secrets_path), timeout=timeout)
-        self.scheduler = DailyScheduler()
+        self._controller = DBController()
+        self._rotor = Rotor(
+            controller=self._controller,
+            secrets=load_secrets(secrets_path),
+            timeout=timeout,
+        )
+        self.scheduler = DailyScheduler(
+            controller=self._controller, func=self._controller.flush_usage
+        )
 
     async def chat(
         self,

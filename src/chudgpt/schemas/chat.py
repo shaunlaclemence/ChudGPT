@@ -51,6 +51,13 @@ class Usage:
         )
 
 
+def mask_key(api_key: str) -> str:
+    """The count of hidden characters, then the key's last 5."""
+    if len(api_key) <= 5:
+        return f"**{len(api_key)}**"
+    return f"**{len(api_key) - 5}**{api_key[-5:]}"
+
+
 class Provider(BaseModel):
     account: str
     name: str
@@ -60,10 +67,7 @@ class Provider(BaseModel):
 
     @property
     def masked_key(self) -> str:
-        """The count of hidden characters, then the key's last 5."""
-        if len(self.api_key) <= 5:
-            return f"**{len(self.api_key)}**"
-        return f"**{len(self.api_key) - 5}**{self.api_key[-5:]}"
+        return mask_key(self.api_key)
 
     def __repr__(self) -> str:
         return (

@@ -16,7 +16,9 @@ if TYPE_CHECKING:
 
 
 class Rotor:
-    def __init__(self, secrets: Secrets, timeout: float = 120.0):
+    def __init__(
+        self, controller: DBController, secrets: Secrets, timeout: float = 120.0
+    ):
         self.secrets = parse_providers(secrets)
         for config in PROVIDERS:
             if self.secrets.get(config.name):
@@ -26,7 +28,7 @@ class Rotor:
         else:
             raise ValueError(f"no api_key for any of: {[p.name for p in PROVIDERS]}")
         self._timeout = timeout
-        self.db_controller = DBController()
+        self.controller = controller
 
     def __client(self):
         return openai.AsyncOpenAI(
@@ -71,7 +73,7 @@ class Rotor:
 
         ## Record usage
         usage = Usage.from_completion(result)
-        self.db_controller.create_usage_record(usage, slug)
+        self.controller.create_usage_record(usage, slug)
 
         return Response(
             text=result.choices[0].message.content or "",
