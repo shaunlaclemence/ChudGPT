@@ -13,11 +13,12 @@ from platformdirs import user_data_path
 from chudgpt.exceptions import (
     ChudGPTBadDataException,
     ChudGPTConflictException,
-    ChudGPTFileNotFoundException,
     ChudGPTForbiddenException,
     ChudGPTInternalServerException,
     ChudGPTInvalidPathException,
+    ChudGPTNotFoundException,
     ChudGPTServiceUnavailableException,
+    ServiceCode,
 )
 
 APP_NAME = "chudgpt"
@@ -62,17 +63,22 @@ def file_exception_handler(
         try:
             return func(self, *args, **kwargs)
         except FileNotFoundError as err:
-            raise ChudGPTFileNotFoundException(
-                "secrets.json missing at the resolved root directory", err
+            raise ChudGPTNotFoundException(
+                "secrets.json missing at the resolved root directory",
+                ServiceCode.FILE_SERVICE,
+                err,
             )
         except PermissionError as err:
             raise ChudGPTForbiddenException(
                 "OS denied read access; Restrictive file permissions or a windows "
                 "process holding an external lock",
+                ServiceCode.FILE_SERVICE,
                 err,
             )
         except (json.JSONDecodeError, UnicodeDecodeError) as err:
-            raise ChudGPTBadDataException("Corrupted, malformed or invalid JSON", err)
+            raise ChudGPTBadDataException(
+                "Corrupted, malformed or invalid JSON", ServiceCode.FILE_SERVICE, err
+            )
         except (IsADirectoryError, NotADirectoryError) as err:
             raise ChudGPTInvalidPathException(
                 "Resolved path points to a directory or an invalid path segment, "
@@ -82,6 +88,7 @@ def file_exception_handler(
         except FileExistsError as err:
             raise ChudGPTConflictException(
                 "A file already occupies the target path, blocking directory creation",
+                ServiceCode.FILE_SERVICE,
                 err,
             )
         except sqlite3.OperationalError as err:
@@ -91,7 +98,9 @@ def file_exception_handler(
                 err,
             )
         except OSError as err:
-            raise ChudGPTInternalServerException(error=err)
+            raise ChudGPTInternalServerException(
+                service_code=ServiceCode.FILE_SERVICE, error=err
+            )
 
     return wrapper
 

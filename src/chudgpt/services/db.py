@@ -5,13 +5,37 @@ from datetime import UTC, datetime
 from importlib import resources
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
-from sqlalchemy import Engine, create_engine, delete, select
+from sqlalchemy import Engine, create_engine, delete, exc, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import exc as orm_exc
 
 from chudgpt.db.models import Base, Meta, ModelQuota, ModelUsage, Provider
+from chudgpt.exceptions import (
+    ChudGPTConflictException,
+    ChudGPTDBConfigException,
+    ChudGPTInternalServerException,
+    ChudGPTNotFoundException,
+    ChudGPTServiceUnavailableException,
+    DBServiceException,
+    ServiceCode,
+)
 from chudgpt.schemas.chat import Usage, mask_key
 from chudgpt.services.files import FilesService
+
+UNAVAILABLE = (
+    exc.OperationalError,
+    exc.InterfaceError,
+    exc.DisconnectionError,
+    exc.TimeoutError,
+)
+CONFLICT = (
+    exc.IntegrityError,
+    exc.MultipleResultsFound,
+    orm_exc.StaleDataError,
+    orm_exc.ObjectDeletedError,
+)
+CONFIG = (json.JSONDecodeError, UnicodeDecodeError, KeyError, TypeError)
 
 _session_factory: sessionmaker | None = None
 
@@ -24,8 +48,44 @@ def configure_session_factory(engine: Engine) -> None:
 def get_db() -> Session:
     """A ready-to-use session. Caller owns commit/rollback/close."""
     if _session_factory is None:
-        raise ValueError("db not initialised")
+        raise ChudGPTInternalServerException(
+            "db used before initialisation", ServiceCode.DB_SERVICE
+        )
     return _session_factory()
+
+
+def to_db_exception(err: Exception) -> DBServiceException:
+    """Narrow any failure to one of the five DB service exceptions.
+
+    The originating error is kept on ``.error`` for diagnosis, so collapsing
+    the long tail into ChudGPTDBInternalException loses nothing.
+    """
+    if isinstance(err, DBServiceException):
+        return err
+    if isinstance(err, exc.NoResultFound):
+        return ChudGPTNotFoundException(
+            "record does not exist", ServiceCode.DB_SERVICE, err
+        )
+    if isinstance(err, CONFLICT):
+        return ChudGPTConflictException(
+            "write rejected: constraint violated, duplicate row, or row changed "
+            "by another transaction",
+            ServiceCode.DB_SERVICE,
+            err,
+        )
+    if isinstance(err, UNAVAILABLE):
+        return ChudGPTServiceUnavailableException(
+            "database unreachable: locked, unopenable, or the connection dropped",
+            ServiceCode.DB_SERVICE,
+            err,
+        )
+    if isinstance(err, CONFIG):
+        return ChudGPTDBConfigException(
+            "config or secrets JSON is invalid, or missing a required field", err
+        )
+    return ChudGPTInternalServerException(
+        "unhandled database failure", ServiceCode.DB_SERVICE, err
+    )
 
 
 P = ParamSpec("P")
@@ -43,10 +103,25 @@ def db_exception_handler(
             db.commit()
         except SQLAlchemyError as err:
             db.rollback()
-            raise ValueError(f"DB Error: {err}") from err
+            raise to_db_exception(err) from err
         finally:
             db.close()
         return result
+
+    return wrapper
+
+
+def db_source_exception_handler(
+    func: Callable[Concatenate[Any, P], R],
+) -> Callable[Concatenate[Any, P], R]:
+    """For methods that own no session: engine setup and config loading."""
+
+    @functools.wraps(func)
+    def wrapper(self, *args: P.args, **kwargs: P.kwargs) -> R:
+        try:
+            return func(self, *args, **kwargs)
+        except (SQLAlchemyError, *CONFIG) as err:
+            raise to_db_exception(err) from err
 
     return wrapper
 
@@ -58,6 +133,7 @@ class DBService:
         self.__init_providers()
         self.__init_quotas()
 
+    @db_source_exception_handler
     def __create_all(self):
         self.__files.init_store()
         self.engine = create_engine(f"sqlite:///{self.__files.db_path().resolve()}")
@@ -68,11 +144,10 @@ class DBService:
         db.execute(delete(model))
         db.add_all(rows)
 
-    @db_exception_handler
-    def __init_providers(self, db: Session):
-        secrets_path = self.__files.secrets_path()
-        providers = self.__files.json_to_dict(secrets_path)
-        gemini_providers = [
+    @db_source_exception_handler
+    def __gemini_providers(self) -> list[Provider]:
+        providers = self.__files.json_to_dict(self.__files.secrets_path())
+        return [
             Provider(
                 email=p["account"],
                 name=p["name"],
@@ -82,16 +157,15 @@ class DBService:
             )
             for p in providers["gemini"]
         ]
-        self.__replace_all(db, Provider, gemini_providers)
 
-    @db_exception_handler
-    def __init_quotas(self, db: Session):
+    @db_source_exception_handler
+    def __gemini_quotas(self) -> list[ModelQuota]:
         configs = json.loads(
             resources.files("chudgpt")
             .joinpath("config.json")
             .read_text(encoding="utf-8")
         )
-        gemini_configs = [
+        return [
             ModelQuota(
                 model=q["slug"],
                 rpd=q["rpd"],
@@ -101,7 +175,14 @@ class DBService:
             )
             for q in configs["gemini"].values()
         ]
-        self.__replace_all(db, ModelQuota, gemini_configs)
+
+    @db_exception_handler
+    def __init_providers(self, db: Session):
+        self.__replace_all(db, Provider, self.__gemini_providers())
+
+    @db_exception_handler
+    def __init_quotas(self, db: Session):
+        self.__replace_all(db, ModelQuota, self.__gemini_quotas())
 
     @db_exception_handler
     def flush_usage(self, db: Session):
