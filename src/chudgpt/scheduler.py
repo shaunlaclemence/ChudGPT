@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Protocol
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -20,8 +21,16 @@ def previous_fire_time(now=None):
     return midnight
 
 
+class Controller(Protocol):
+    def get_meta(self, key: str) -> str | None:
+        pass
+
+    def set_meta(self, key: str, value: str) -> None:
+        pass
+
+
 class DailyScheduler:
-    def __init__(self, controller=None):
+    def __init__(self, controller: Controller | None = None):
         self._controller = controller or DBController()
         self._scheduler = BackgroundScheduler(timezone=RESET_TZ)
 
