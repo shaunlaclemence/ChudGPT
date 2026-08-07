@@ -27,7 +27,10 @@ class BaseException(Exception):
 
 class ChudGPTInternalServerException(BaseException):
     def __init__(
-        self, message: str, service_code: ServiceCode, error: Any | None = None
+        self,
+        message: str | None = None,
+        service_code: ServiceCode = ServiceCode.UNKOWN_SERVICE,
+        error: Any | None = None,
     ) -> None:
         super().__init__(message, "500", service_code, error)
 

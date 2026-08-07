@@ -95,6 +95,7 @@ def file_exception_handler(
             raise ChudGPTServiceUnavailableException(
                 "Unable to open the sqlite database file; check the path, disk "
                 "space, and permissions",
+                ServiceCode.FILE_SERVICE,
                 err,
             )
         except OSError as err:
