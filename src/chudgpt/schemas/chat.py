@@ -50,6 +50,9 @@ class Usage:
             total=usage.total_tokens or 0,
         )
 
+    def __str__(self) -> str:
+        return f"Usage(prompt={self.prompt}, completion={self.completion}, reasoning={self.reasoning}, total={self.total}, requests={self.requests})"
+
 
 def mask_key(api_key: str) -> str:
     """The count of hidden characters, then the key's last 5."""
@@ -69,7 +72,7 @@ class Provider(BaseModel):
     def masked_key(self) -> str:
         return mask_key(self.api_key)
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return (
             f"Provider(account={self.account!r}, name={self.name!r}, "
             f"project_name={self.project_name!r}, "
@@ -84,6 +87,8 @@ class Response:
     model: str
     usage: Usage
     provider: Provider
+    duration: float
+    """Wall-clock time the provider call took, in seconds."""
 
     @property
     def message(self) -> Message:
@@ -97,5 +102,6 @@ class Response:
                 f"model:    {self.model}",
                 f"usage:    {self.usage}",
                 f"provider: {self.provider}",
+                f"duration: {self.duration:.3f}s",
             ]
         )

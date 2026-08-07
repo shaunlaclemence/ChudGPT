@@ -9,7 +9,7 @@ class ProviderConfig:
     base_url: str
 
 
-PROVIDERS: tuple[ProviderConfig, ...] = (
+PROVIDER_CONFIGS: tuple[ProviderConfig, ...] = (
     ProviderConfig(
         name="gemini",
         base_url="https://generativelanguage.googleapis.com/v1beta/openai/",

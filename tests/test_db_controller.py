@@ -3,7 +3,7 @@ import threading
 import pytest
 
 from chudgpt.db.db_initialiser import DBInitialiser
-from chudgpt.scheduler import META_KEY, DailyScheduler
+from chudgpt.services.scheduler import META_KEY, SchedulerService
 
 
 class FakeController:
@@ -33,11 +33,11 @@ def test_read_json():
 
 def test_scheduler_runs_catchup_job_and_records_last_run():
     controller = FakeController()
-    sched = DailyScheduler(controller=controller)
     ran = threading.Event()
+    sched = SchedulerService(ran.set, controller)
 
     try:
-        sched.start(ran.set)
+        sched.start()
         assert sched.running
 
         assert ran.wait(timeout=2), "catchup job did not run"
