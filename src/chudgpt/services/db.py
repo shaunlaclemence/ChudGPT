@@ -12,12 +12,12 @@ from sqlalchemy.orm import exc as orm_exc
 
 from chudgpt.db.models import Base, Meta, ModelQuota, ModelUsage, Provider
 from chudgpt.exceptions import (
+    BaseException,
     ChudGPTConflictException,
     ChudGPTDBConfigException,
     ChudGPTInternalServerException,
     ChudGPTNotFoundException,
     ChudGPTServiceUnavailableException,
-    DBServiceException,
     ServiceCode,
 )
 from chudgpt.schemas.chat import Usage, mask_key
@@ -54,13 +54,13 @@ def get_db() -> Session:
     return _session_factory()
 
 
-def to_db_exception(err: Exception) -> DBServiceException:
+def to_db_exception(err: Exception) -> BaseException:
     """Narrow any failure to one of the five DB service exceptions.
 
     The originating error is kept on ``.error`` for diagnosis, so collapsing
     the long tail into ChudGPTDBInternalException loses nothing.
     """
-    if isinstance(err, DBServiceException):
+    if isinstance(err, BaseException):
         return err
     if isinstance(err, exc.NoResultFound):
         return ChudGPTNotFoundException(
