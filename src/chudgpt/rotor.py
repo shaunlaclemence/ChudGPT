@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, cast
 
 import openai
 
-from chudgpt.db.db_controller import DBController
+from chudgpt.services.db import DBService
 
 from .providers.config import PROVIDERS
 from .providers.gemini import GeminiModel
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 class Rotor:
     def __init__(
-        self, controller: DBController, secrets: Secrets, timeout: float = 120.0
+        self, controller: DBService, secrets: Secrets, timeout: float = 120.0
     ):
         self.secrets = parse_providers(secrets)
         for config in PROVIDERS:

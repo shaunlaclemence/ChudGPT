@@ -33,11 +33,11 @@ def test_read_json():
 
 def test_scheduler_runs_catchup_job_and_records_last_run():
     controller = FakeController()
-    sched = DailyScheduler(controller=controller)
     ran = threading.Event()
+    sched = DailyScheduler(func=ran.set, controller=controller)
 
     try:
-        sched.start(ran.set)
+        sched.start()
         assert sched.running
 
         assert ran.wait(timeout=2), "catchup job did not run"

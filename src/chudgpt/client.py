@@ -3,10 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from chudgpt.db.db_controller import DBController
 from chudgpt.scheduler import DailyScheduler
+from chudgpt.services.db import DBService
+from chudgpt.services.files import FilesService
 
-from .paths import set_app_name
 from .providers.gemini import GeminiModel
 from .rotor import Rotor
 from .schemas.chat import Message, MessageRole, Response
@@ -43,8 +43,9 @@ class ChudGPT:
         timeout: float = 30.0,
         app_name: str | None = None,
     ):
-        set_app_name(app_name)
-        self._controller = DBController()
+        files = FilesService()
+        files.set_app_name(app_name)
+        self._controller = DBService(files)
         self._rotor = Rotor(
             controller=self._controller,
             secrets=load_secrets(secrets_path),

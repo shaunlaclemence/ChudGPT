@@ -187,7 +187,7 @@ class DBService:
     @db_exception_handler
     def flush_usage(self, db: Session):
         # TODO: offload data to save it for analytics
-        db.execute(delete(ModelQuota))
+        db.execute(delete(ModelUsage))
 
     @db_exception_handler
     def create_usage_record(self, db: Session, usage: Usage, model: str) -> None:
