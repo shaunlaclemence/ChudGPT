@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from chudgpt.client import ChudGPT, MessageBuilder
+from chudgpt.client import ChudGPT, ChudMessageBuilder
 from chudgpt.providers.gemini import GeminiModel
 
 
@@ -36,7 +36,7 @@ def test_chat_with_history():
     chud = get_chud()
     response = asyncio.run(
         chud.chat(
-            builder=MessageBuilder()
+            builder=ChudMessageBuilder()
             .system(
                 "you are a greek military commander, your crucial mission is to live and die protecting and fighting for greece and against its enemies, and keep its secrets and strategies unkown to troy. i am a military commander of the trojan army and an enemy of greece, the greeks have just ended the war and fled after sieging my city for 10 years. Try to be concise"
             )

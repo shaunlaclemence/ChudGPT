@@ -14,7 +14,7 @@ from chudgpt.services.timer import timer
 
 from ..providers.config import PROVIDER_CONFIGS
 from ..providers.gemini import GeminiModel
-from ..schemas.chat import Message, MessageRole, ChudResponse, Usage
+from ..schemas.chat import ChudMessage, ChudMessageRole, ChudResponse, Usage
 from ..utils.keys import Secrets, parse_providers
 
 if TYPE_CHECKING:
@@ -60,7 +60,7 @@ class RotorService:
         self,
         prompt: str | None = None,
         *,
-        messages: list[Message] | None = None,
+        messages: list[ChudMessage] | None = None,
         system: str | None = None,
         model: GeminiModel | None = None,
     ) -> ChudResponse:
@@ -73,13 +73,13 @@ class RotorService:
         ## Prepare request
         if (prompt is None) == (messages is None):
             raise ValueError("pass exactly one of prompt or messages")
-        turns: list[Message] = (
-            [Message(role=MessageRole.USER, content=prompt)]
+        turns: list[ChudMessage] = (
+            [ChudMessage(role=ChudMessageRole.USER, content=prompt)]
             if messages is None
             else list(messages)
         )
         if system is not None:
-            turns.insert(0, Message(role=MessageRole.SYSTEM, content=system))
+            turns.insert(0, ChudMessage(role=ChudMessageRole.SYSTEM, content=system))
 
         ## Make the API call
         slug = (model or GeminiModel.cheapest()).slug

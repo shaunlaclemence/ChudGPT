@@ -7,30 +7,30 @@ from chudgpt.services.files import FilesService
 from chudgpt.services.scheduler import SchedulerService
 
 from .providers.gemini import GeminiModel
-from .schemas.chat import Message, MessageRole, ChudResponse
+from .schemas.chat import ChudMessage, ChudMessageRole, ChudResponse
 from .services.rotor import RotorService
 from .utils.keys import load_secrets
 
 
-class MessageBuilder:
+class ChudMessageBuilder:
     def __init__(self) -> None:
-        self.messages_list: list[Message] = []
+        self.messages_list: list[ChudMessage] = []
 
     def system(self, content: Any):
         if len(self.messages_list) > 0:
             raise ValueError("System must be the first message")
-        self.messages_list.append(Message(role=MessageRole.SYSTEM, content=content))
+        self.messages_list.append(ChudMessage(role=ChudMessageRole.SYSTEM, content=content))
         return self
 
     def prompt(self, content: Any):
-        self.messages_list.append(Message(role=MessageRole.USER, content=content))
+        self.messages_list.append(ChudMessage(role=ChudMessageRole.USER, content=content))
         return self
 
     def assistant(self, content: Any):
-        self.messages_list.append(Message(role=MessageRole.ASSISTANT, content=content))
+        self.messages_list.append(ChudMessage(role=ChudMessageRole.ASSISTANT, content=content))
         return self
 
-    def messages(self, messages: list[Message]):
+    def messages(self, messages: list[ChudMessage]):
         self.messages_list += messages
         return self
 
@@ -92,9 +92,9 @@ class ChudGPT:
         self,
         prompt: str | None = None,
         *,
-        messages: list[Message] | None = None,
+        messages: list[ChudMessage] | None = None,
         system: str | None = None,
-        builder: MessageBuilder | None = None,
+        builder: ChudMessageBuilder | None = None,
         model: GeminiModel | None = None,
     ) -> ChudResponse:
         if builder:

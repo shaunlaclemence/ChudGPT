@@ -7,15 +7,15 @@ from typing import Any
 from pydantic import BaseModel
 
 
-class MessageRole(str, Enum):
+class ChudMessageRole(str, Enum):
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
 
 
 @dataclass
-class Message:
-    role: MessageRole
+class ChudMessage:
+    role: ChudMessageRole
     content: Any
 
 
@@ -91,8 +91,8 @@ class ChudResponse:
     """Wall-clock time the provider call took, in seconds."""
 
     @property
-    def message(self) -> Message:
-        return Message(role=MessageRole.ASSISTANT, content=self.text)
+    def message(self) -> ChudMessage:
+        return ChudMessage(role=ChudMessageRole.ASSISTANT, content=self.text)
 
     def __repr__(self) -> str:
         return "\n".join(

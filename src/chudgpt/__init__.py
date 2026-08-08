@@ -9,16 +9,16 @@ Every exception lives in ``chudgpt.exceptions``. Everything else -- the services
 and may change without notice.
 """
 
-from .client import ChudGPT, MessageBuilder
+from .client import ChudGPT, ChudMessageBuilder
 from .providers.gemini import GeminiModel
-from .schemas.chat import ChudResponse, Message, MessageRole, Usage
+from .schemas.chat import ChudMessage, ChudMessageRole, ChudResponse, Usage
 
 __all__ = [
     "ChudGPT",
+    "ChudMessage",
+    "ChudMessageBuilder",
+    "ChudMessageRole",
     "ChudResponse",
     "GeminiModel",
-    "Message",
-    "MessageBuilder",
-    "MessageRole",
     "Usage",
 ]
