@@ -1,51 +1,46 @@
-"""chudgpt — rotate free-tier AI API keys across providers, transparently.
-
-    from chudgpt import ChudClient
-
-    client = ChudClient(secrets_path="secrets.json")
-    print(client.ask("hello").text)
-
-``ChudClient`` is the entry point. Also public: the ``Tier``/``Model``/
-``Temperature`` enums, the exception hierarchy (all deriving from
-``ChudGPTError``), and the result types returned by client calls
-(``Response``, ``StreamChunk``, ``KeyUsage``, ``Conversation``).
-
-Everything else (``Rotor``, ``PROVIDERS``, ``ProviderConfig``, ``QuotaTracker``,
-keystore/state helpers) is internal — reachable via submodules if you really need
-it, but not part of the supported surface and free to change between versions.
+"""ChudGPT's public API: the client, the types its methods take and return, and
+every exception it can raise. Everything else (Rotor, DBService, FilesService,
+DailyScheduler, ORM models) is internal and may change without notice.
 """
 
-from .client import ChudClient, Conversation
-from .errors import (
-    AllProvidersExhausted,
-    ChudGPTError,
-    ConfigError,
-    InvalidRequestError,
-    InvalidTierError,
-    ProviderError,
-    SecretsFileError,
-    StreamInterrupted,
-    UnknownProviderError,
+from .client import ChudGPT, MessageBuilder
+from .exceptions import (
+    BaseException,
+    ChudGPTBadDataException,
+    ChudGPTConflictException,
+    ChudGPTDBConfigException,
+    ChudGPTForbiddenException,
+    ChudGPTInternalServerException,
+    ChudGPTInvalidPathException,
+    ChudGPTNotFoundException,
+    ChudGPTServiceUnavailableException,
+    ChudGPTUnauthorizedException,
+    DBServiceException,
+    FileServiceException,
+    ServiceCode,
 )
-from .params import Model, Temperature, Tier
-from .rotor import KeyUsage, Response, StreamChunk
+from .providers.gemini import GeminiModel
+from .schemas.chat import Message, MessageRole, Response, Usage
 
 __all__ = [
-    "AllProvidersExhausted",
-    "ChudClient",
-    "ChudGPTError",
-    "ConfigError",
-    "Conversation",
-    "InvalidRequestError",
-    "InvalidTierError",
-    "KeyUsage",
-    "Model",
-    "ProviderError",
+    "BaseException",
+    "ChudGPT",
+    "ChudGPTBadDataException",
+    "ChudGPTConflictException",
+    "ChudGPTDBConfigException",
+    "ChudGPTForbiddenException",
+    "ChudGPTInternalServerException",
+    "ChudGPTInvalidPathException",
+    "ChudGPTNotFoundException",
+    "ChudGPTServiceUnavailableException",
+    "ChudGPTUnauthorizedException",
+    "DBServiceException",
+    "FileServiceException",
+    "GeminiModel",
+    "Message",
+    "MessageBuilder",
+    "MessageRole",
     "Response",
-    "SecretsFileError",
-    "StreamChunk",
-    "StreamInterrupted",
-    "Temperature",
-    "Tier",
-    "UnknownProviderError",
+    "ServiceCode",
+    "Usage",
 ]

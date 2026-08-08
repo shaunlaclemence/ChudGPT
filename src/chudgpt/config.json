@@ -1,27 +1,67 @@
 {
-  "gemini": [
-    "gemini-3.6-flash",
-    "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
-    "gemini-2.5-pro",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite"
-  ],
-  "groq": [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant"
-  ],
-  "mistral": [
-    "mistral-large-latest",
-    "mistral-small-latest"
-  ],
-  "xai": [
-    "grok-4",
-    "grok-4-fast"
-  ],
-  "openrouter": [
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "meta-llama/llama-3.1-8b-instruct:free"
-  ]
+  "gemini": {
+    "FLASH_3_6": {
+      "slug": "gemini-3.6-flash",
+      "rpd": 20,
+      "rpm": 5,
+      "tpm": 250000,
+      "inputs": ["text", "image", "audio", "video"]
+    },
+    "FLASH_3_5": {
+      "slug": "gemini-3.5-flash",
+      "rpd": 20,
+      "rpm": 5,
+      "tpm": 250000,
+      "inputs": ["text", "image", "audio", "video"]
+    },
+    "FLASH_LITE_3_5": {
+      "slug": "gemini-3.5-flash-lite",
+      "rpd": 500,
+      "rpm": 15,
+      "tpm": 250000,
+      "inputs": ["text", "image", "audio", "video"]
+    },
+    "FLASH_LITE_3_1": {
+      "slug": "gemini-3.1-flash-lite",
+      "rpd": 500,
+      "rpm": 15,
+      "tpm": 250000,
+      "inputs": ["text", "image", "audio", "video"]
+    },
+    "FLASH_3_PREVIEW": {
+      "slug": "gemini-3-flash-preview",
+      "rpd": 20,
+      "rpm": 5,
+      "tpm": 250000,
+      "inputs": ["text", "image", "audio", "video"]
+    },
+    "FLASH_2_5": {
+      "slug": "gemini-2.5-flash",
+      "rpd": 20,
+      "rpm": 5,
+      "tpm": 250000,
+      "inputs": ["text", "image", "audio", "video"]
+    },
+    "FLASH_LITE_2_5": {
+      "slug": "gemini-2.5-flash-lite",
+      "rpd": 20,
+      "rpm": 10,
+      "tpm": 250000,
+      "inputs": ["text", "image", "audio", "video"]
+    },
+    "GEMMA_4_26B": {
+      "slug": "gemma-4-26b-a4b-it",
+      "rpd": 14400,
+      "rpm": 30,
+      "tpm": 16000,
+      "inputs": ["text", "image", "video"]
+    },
+    "GEMMA_4_31B": {
+      "slug": "gemma-4-31b-it",
+      "rpd": 14400,
+      "rpm": 30,
+      "tpm": 16000,
+      "inputs": ["text", "image", "video"]
+    }
+  }
 }

@@ -17,3 +17,6 @@ keys.json
 *.tokens.json
 state.json
 secrets.json
+
+# local quota tracking
+.chudgpt/

@@ -1,169 +1,172 @@
-from datetime import timedelta
+import asyncio
 
+import openai
 import pytest
-import respx
-from conftest import completion_json
+from httpx import Request as HttpRequest
 from httpx import Response as HttpResponse
 
-from chudgpt.errors import AllProvidersExhausted, InvalidRequestError
-from chudgpt.rotor import Rotor
+from chudgpt.exceptions import ChudGPTRateLimitException
+from chudgpt.providers.gemini import GeminiModel
+from chudgpt.schemas.chat import Message, Response
+from chudgpt.services.db import DBService
+from chudgpt.services.exceptions.rotor import (
+    rotor_exception_handler,
+    rotor_rotation_handler,
+)
+from chudgpt.services.files import FilesService
+from chudgpt.services.rotor import RotorService
+from chudgpt.utils.keys import load_secrets
 
-KEYS = {"alpha": ["sk-alpha"], "beta": ["sk-beta"]}
-
-ALPHA_URL = "https://alpha.test/v1/chat/completions"
-BETA_URL = "https://beta.test/v1/chat/completions"
+APP_NAME = "Test App"
 
 
-def make_rotor(providers, tmp_path, now, keys=None):
-    return Rotor(
-        keys or dict(KEYS),
-        providers=providers,
-        state_file=tmp_path / "state.json",
-        now=lambda: now,
+class TestRotor(RotorService):
+    def rotate_provider(self):
+        self._rotate_provider()
+
+    def provider(self):
+        return self._provider()
+
+    @rotor_exception_handler
+    async def test_chat(
+        self,
+        prompt: str | None = None,
+        *,
+        messages: list[Message] | None = None,
+        system: str | None = None,
+        model: GeminiModel | None = None,
+        raise_error: BaseException | None = None,
+    ) -> Response:
+        if raise_error is not None:
+            error = raise_error
+            raise error
+        return await self.chat(prompt, messages=messages, system=system, model=model)
+
+    @rotor_rotation_handler
+    @rotor_exception_handler
+    async def test_chat_rotate(
+        self,
+        prompt: str | None = None,
+        *,
+        messages: list[Message] | None = None,
+        system: str | None = None,
+        model: GeminiModel | None = None,
+        raise_error: BaseException | None = None,
+    ) -> Response:
+        if raise_error is not None:
+            error = raise_error
+            raise error
+        return await self.chat(prompt, messages=messages, system=system, model=model)
+
+
+def get_rotor() -> TestRotor:
+    files = FilesService()
+    files.set_app_name(APP_NAME)
+
+    db = DBService(files)
+    rotor = TestRotor(
+        db_service=db,
+        secrets=load_secrets(files.secrets_path()),
+        timeout=30.0,
     )
+    return rotor
 
 
-@respx.mock
-def test_uses_highest_priority_provider(providers, tmp_path, now):
-    route = respx.post(ALPHA_URL).mock(
-        return_value=HttpResponse(200, json=completion_json("alpha-small"))
-    )
-    rotor = make_rotor(providers, tmp_path, now)
-    reply = rotor.chat("hi")
-    assert reply.text == "hello"
-    assert reply.provider == "alpha"
-    assert reply.usage["total_tokens"] == 12
-    assert route.called
+@pytest.mark.skip("Tested")
+def test_rotote():
+    rotor = get_rotor()
+
+    def __print():
+        print("\n\nprovider: ", rotor.provider())
+        print("provider_config: ", rotor.provider_config)
+
+    __print()
+    rotor.rotate_provider()
+    __print()
+    rotor.rotate_provider()
+    __print()
 
 
-@respx.mock
-def test_rotates_to_next_provider_on_429(providers, tmp_path, now):
-    respx.post(ALPHA_URL).mock(
-        return_value=HttpResponse(429, json={"error": {"message": "quota"}})
-    )
-    respx.post(BETA_URL).mock(
-        return_value=HttpResponse(200, json=completion_json("beta-small"))
-    )
-    rotor = make_rotor(providers, tmp_path, now)
-    reply = rotor.chat("hi")
-    assert reply.provider == "beta"
-    status = rotor.status()
-    alpha_kid = next(k for k in status if k.startswith("alpha:"))
-    assert "cooling down" in status[alpha_kid]
+@pytest.mark.skip("Tested")
+def test_rotate_and_chat():
+    rotor = get_rotor()
 
-
-@respx.mock
-def test_respects_retry_after_header(providers, tmp_path, now):
-    respx.post(ALPHA_URL).mock(
-        return_value=HttpResponse(
-            429,
-            json={"error": {"message": "slow down"}},
-            headers={"retry-after": "120"},
+    res1 = asyncio.run(
+        rotor.chat(
+            "Explain the epic of Gilgamesh in 1 sentence",
+            model=GeminiModel.FLASH_LITE_3_5,
         )
     )
-    respx.post(BETA_URL).mock(
-        return_value=HttpResponse(200, json=completion_json("beta-small"))
-    )
-    rotor = make_rotor(providers, tmp_path, now)
-    rotor.chat("hi")
-    alpha_kid = next(k for k in rotor.tracker.keys if k.startswith("alpha:"))
-    exhausted_until = rotor.tracker.keys[alpha_kid].exhausted_until
-    assert exhausted_until == pytest.approx((now + timedelta(seconds=120)).timestamp())
 
+    print(res1)
 
-@respx.mock
-def test_all_exhausted_raises_with_reset_time(providers, tmp_path, now):
-    respx.post(ALPHA_URL).mock(
-        return_value=HttpResponse(429, json={"error": {"message": "quota"}})
-    )
-    respx.post(BETA_URL).mock(
-        return_value=HttpResponse(429, json={"error": {"message": "quota"}})
-    )
-    rotor = make_rotor(providers, tmp_path, now)
-    with pytest.raises(AllProvidersExhausted) as exc:
-        rotor.chat("hi")
-    assert exc.value.earliest_reset is not None
-    assert exc.value.earliest_reset > now
-    assert len(exc.value.statuses) == 2
+    rotor.rotate_provider()
 
-
-@respx.mock
-def test_state_persists_across_instances(providers, tmp_path, now):
-    respx.post(ALPHA_URL).mock(
-        return_value=HttpResponse(429, json={"error": {"message": "quota"}})
-    )
-    respx.post(BETA_URL).mock(
-        return_value=HttpResponse(200, json=completion_json("beta-small"))
-    )
-    rotor = make_rotor(providers, tmp_path, now)
-    rotor.chat("hi")
-
-    # A brand-new rotor (same state file) already knows alpha is exhausted and
-    # goes straight to beta without touching alpha.
-    respx.post(ALPHA_URL).mock(side_effect=AssertionError("should not be called"))
-    rotor2 = make_rotor(providers, tmp_path, now + timedelta(minutes=1))
-    reply = rotor2.chat("hi again")
-    assert reply.provider == "beta"
-
-
-@respx.mock
-def test_proactive_skip_at_known_daily_cap(providers, tmp_path, now):
-    capped = (
-        providers[0].__class__(**{**providers[0].__dict__, "known_rpd": 1}),
-        providers[1],
-    )
-    respx.post(ALPHA_URL).mock(
-        return_value=HttpResponse(200, json=completion_json("alpha-small"))
-    )
-    respx.post(BETA_URL).mock(
-        return_value=HttpResponse(200, json=completion_json("beta-small"))
-    )
-    rotor = make_rotor(capped, tmp_path, now)
-    assert rotor.chat("one").provider == "alpha"
-    # cap of 1 reached: second call must skip alpha without a request
-    assert rotor.chat("two").provider == "beta"
-
-
-@respx.mock
-def test_transient_5xx_moves_on_with_short_cooldown(providers, tmp_path, now):
-    respx.post(ALPHA_URL).mock(
-        return_value=HttpResponse(500, json={"error": {"message": "boom"}})
-    )
-    respx.post(BETA_URL).mock(
-        return_value=HttpResponse(200, json=completion_json("beta-small"))
-    )
-    rotor = make_rotor(providers, tmp_path, now)
-    assert rotor.chat("hi").provider == "beta"
-    # after the 60s transient cooldown, alpha is eligible again
-    alpha_kid = next(k for k in rotor.tracker.keys if k.startswith("alpha:"))
-    assert (
-        rotor.tracker.status(alpha_kid, providers[0], now + timedelta(seconds=61))
-        is None
+    res2 = asyncio.run(
+        rotor.chat(
+            "Explain the Odyssey in 1 sentence",
+            model=GeminiModel.FLASH_LITE_3_5,
+        )
     )
 
-
-@respx.mock
-def test_usage_reports_percent_of_known_daily_cap(providers, tmp_path, now):
-    respx.post(ALPHA_URL).mock(
-        return_value=HttpResponse(200, json=completion_json("alpha-small"))
-    )
-    rotor = make_rotor(providers, tmp_path, now)
-    rotor.chat("hi")
-    usage = rotor.usage()
-    alpha_kid = next(k for k in usage if k.startswith("alpha:"))
-    beta_kid = next(k for k in usage if k.startswith("beta:"))
-    assert usage[alpha_kid].requests_today == 1
-    assert usage[alpha_kid].known_rpd == 100
-    assert usage[alpha_kid].percent_used == 1.0
-    assert usage[alpha_kid].status == "ok"
-    # beta has no known_rpd (conftest), so percent_used is an unknown, not a false 0%
-    assert usage[beta_kid].known_rpd is None
-    assert usage[beta_kid].percent_used is None
+    print(res2)
 
 
-def test_explicit_model_and_bad_args(providers, tmp_path, now):
-    rotor = make_rotor(providers, tmp_path, now)
-    with pytest.raises(InvalidRequestError):
-        rotor.chat()  # neither prompt nor messages
-    with pytest.raises(InvalidRequestError):
-        rotor.chat("hi", messages=[{"role": "user", "content": "hi"}])  # both
+@pytest.mark.skip()
+def test_raise_429():
+    rotor = get_rotor()
+
+    with pytest.raises(ChudGPTRateLimitException) as exc_info:
+        asyncio.run(
+            rotor.test_chat(
+                "Explain the epic of Gilgamesh in 1 sentence",
+                model=GeminiModel.FLASH_LITE_3_5,
+                raise_error=openai.RateLimitError(
+                    "Simulated AI Rate Limit Error",
+                    response=HttpResponse(
+                        429, request=HttpRequest("POST", "https://example.com")
+                    ),
+                    body=None,
+                ),
+            )
+        )
+
+    err = exc_info.value.error
+    assert err is not None
+    print(repr(exc_info.value))
+    print(repr(err))
+    print(vars(err))
+    print("status_code:", err.status_code)
+    print("body:", err.body)
+    print("response:", err.response)
+
+
+def test_rotate_on_rate_limit_exhausts_rotations_then_raises():
+    rotor = get_rotor()
+
+    rotate_calls = 0
+    original_rotate = rotor._rotate_provider
+
+    def counting_rotate():
+        nonlocal rotate_calls
+        rotate_calls += 1
+        original_rotate()
+
+    rotor._rotate_provider = counting_rotate
+
+    with pytest.raises(ChudGPTRateLimitException):
+        asyncio.run(
+            rotor.test_chat_rotate(
+                "Explain the epic of Gilgamesh in 1 sentence",
+                model=GeminiModel.FLASH_LITE_3_5,
+                raise_error=openai.RateLimitError(
+                    "Simulated AI Rate Limit Error",
+                    response=HttpResponse(
+                        429, request=HttpRequest("POST", "https://example.com")
+                    ),
+                    body=None,
+                ),
+            )
+        )
+
+    assert rotate_calls == 3
