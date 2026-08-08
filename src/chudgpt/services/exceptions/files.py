@@ -28,7 +28,7 @@ def file_exception_handler(
             return func(self, *args, **kwargs)
         except FileNotFoundError as err:
             raise ChudGPTNotFoundException(
-                "secrets.json missing at the resolved root directory",
+                f"file not found: {err.filename or 'unknown path'}",
                 ServiceCode.FILE_SERVICE,
                 err,
             )
