@@ -11,14 +11,14 @@ and may change without notice.
 
 from .client import ChudGPT, MessageBuilder
 from .providers.gemini import GeminiModel
-from .schemas.chat import Message, MessageRole, Response, Usage
+from .schemas.chat import ChudResponse, Message, MessageRole, Usage
 
 __all__ = [
     "ChudGPT",
+    "ChudResponse",
     "GeminiModel",
     "Message",
     "MessageBuilder",
     "MessageRole",
-    "Response",
     "Usage",
 ]

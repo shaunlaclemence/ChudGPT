@@ -81,7 +81,7 @@ class Provider(BaseModel):
 
 
 @dataclass(repr=False)
-class Response:
+class ChudResponse:
     text: str
     service: str
     model: str

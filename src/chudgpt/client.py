@@ -7,7 +7,7 @@ from chudgpt.services.files import FilesService
 from chudgpt.services.scheduler import SchedulerService
 
 from .providers.gemini import GeminiModel
-from .schemas.chat import Message, MessageRole, Response
+from .schemas.chat import Message, MessageRole, ChudResponse
 from .services.rotor import RotorService
 from .utils.keys import load_secrets
 
@@ -50,7 +50,7 @@ class ChudGPT:
 
     Methods
         await chat(prompt=None, *, messages=None, system=None, builder=None,
-                   model=None) -> Response
+                   model=None) -> ChudResponse
             Send a turn. Pass exactly one of ``prompt``, ``messages``, or
             ``builder``. ``model`` pins a ``GeminiModel``; omit it to let the
             rotor choose. Usage is recorded against the serving key.
@@ -96,7 +96,7 @@ class ChudGPT:
         system: str | None = None,
         builder: MessageBuilder | None = None,
         model: GeminiModel | None = None,
-    ) -> Response:
+    ) -> ChudResponse:
         if builder:
             if prompt is not None or messages is not None or system is not None:
                 raise ValueError(

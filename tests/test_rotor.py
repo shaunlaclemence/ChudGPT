@@ -7,7 +7,7 @@ from httpx import Response as HttpResponse
 
 from chudgpt.exceptions import ChudGPTRateLimitException
 from chudgpt.providers.gemini import GeminiModel
-from chudgpt.schemas.chat import Message, Response
+from chudgpt.schemas.chat import Message, ChudResponse
 from chudgpt.services.db import DBService
 from chudgpt.services.exceptions.rotor import (
     rotor_exception_handler,
@@ -36,7 +36,7 @@ class TestRotor(RotorService):
         system: str | None = None,
         model: GeminiModel | None = None,
         raise_error: BaseException | None = None,
-    ) -> Response:
+    ) -> ChudResponse:
         if raise_error is not None:
             error = raise_error
             raise error
@@ -52,7 +52,7 @@ class TestRotor(RotorService):
         system: str | None = None,
         model: GeminiModel | None = None,
         raise_error: BaseException | None = None,
-    ) -> Response:
+    ) -> ChudResponse:
         if raise_error is not None:
             error = raise_error
             raise error

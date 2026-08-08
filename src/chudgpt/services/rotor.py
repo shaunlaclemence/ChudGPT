@@ -14,7 +14,7 @@ from chudgpt.services.timer import timer
 
 from ..providers.config import PROVIDER_CONFIGS
 from ..providers.gemini import GeminiModel
-from ..schemas.chat import Message, MessageRole, Response, Usage
+from ..schemas.chat import Message, MessageRole, ChudResponse, Usage
 from ..utils.keys import Secrets, parse_providers
 
 if TYPE_CHECKING:
@@ -63,7 +63,7 @@ class RotorService:
         messages: list[Message] | None = None,
         system: str | None = None,
         model: GeminiModel | None = None,
-    ) -> Response:
+    ) -> ChudResponse:
         """
         @param prompt: standalone prompt
         @param messages: full turn history, sent verbatim
@@ -95,7 +95,7 @@ class RotorService:
         usage = Usage.from_completion(result)
         self.db_service.create_usage_record(usage, slug)
 
-        return Response(
+        return ChudResponse(
             text=result.choices[0].message.content or "",
             service=self.provider_config.name,
             model=result.model,
