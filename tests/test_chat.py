@@ -1,16 +1,13 @@
 import asyncio
-from pathlib import Path
 
 import pytest
 
 from chudgpt.client import ChudGPT, MessageBuilder
 from chudgpt.providers.gemini import GeminiModel
 
-SECRETS_PATH = Path(__file__).resolve().parent.parent / "secrets.json"
-
 
 def get_chud():
-    return ChudGPT(secrets_path=SECRETS_PATH)
+    return ChudGPT()
 
 
 @pytest.mark.skip()

@@ -1,8 +1,23 @@
+"""Every exception ChudGPT can raise.
+
+    from chudgpt.exceptions import ChudGPTNotFoundException
+
+Codes read ``<service_code>-<error_code>``, e.g. "002-404":
+
+    001 FILE_SERVICE   002 DB_SERVICE   003 ROTOR_SERVICE   999 UNKOWN_SERVICE
+
+Catch ``BaseException`` for anything from this library, a service base
+(``FileServiceException``, ``DBServiceException``, ``RotorServiceException``)
+for one subsystem, or a leaf class for one condition.
+"""
+
 from enum import Enum
 from typing import Any
 
 
 class ServiceCode(str, Enum):
+    """Which service a failure came from; the first half of an error code."""
+
     FILE_SERVICE = "001"
     DB_SERVICE = "002"
     ROTOR_SERVICE = "003"
@@ -10,6 +25,12 @@ class ServiceCode(str, Enum):
 
 
 class BaseException(Exception):
+    """Root of every ChudGPT error.
+
+    Full code reads ``<service_code>-<error_code>`` (e.g. "002-404"). The
+    originating exception, when there is one, is kept on ``.error``.
+    """
+
     def __init__(
         self,
         message: str | None,
@@ -27,6 +48,11 @@ class BaseException(Exception):
 
 
 class ChudGPTInternalServerException(BaseException):
+    """500 Internal Server Error -- unhandled failure; treat as a bug.
+
+    error_code "500"; service_code set by the raising service.
+    """
+
     def __init__(
         self,
         message: str | None = None,
@@ -37,6 +63,11 @@ class ChudGPTInternalServerException(BaseException):
 
 
 class ChudGPTServiceUnavailableException(BaseException):
+    """503 Service Unavailable -- the resource is unreachable; retry later.
+
+    error_code "503"; service_code set by the raising service.
+    """
+
     def __init__(
         self, message: str, service_code: ServiceCode, error: Any | None = None
     ) -> None:
@@ -44,6 +75,11 @@ class ChudGPTServiceUnavailableException(BaseException):
 
 
 class ChudGPTConflictException(BaseException):
+    """409 Conflict -- the write was rejected by a constraint or a duplicate.
+
+    error_code "409"; service_code set by the raising service.
+    """
+
     def __init__(
         self, message: str, service_code: ServiceCode, error: Any | None = None
     ) -> None:
@@ -51,6 +87,11 @@ class ChudGPTConflictException(BaseException):
 
 
 class ChudGPTNotFoundException(BaseException):
+    """404 Not Found -- the requested record, file, or resource does not exist.
+
+    error_code "404"; service_code set by the raising service.
+    """
+
     def __init__(
         self, message: str, service_code: ServiceCode, error: Any | None = None
     ) -> None:
@@ -58,6 +99,11 @@ class ChudGPTNotFoundException(BaseException):
 
 
 class ChudGPTForbiddenException(BaseException):
+    """403 Forbidden -- access was denied, usually by file permissions or a lock.
+
+    error_code "403"; service_code set by the raising service.
+    """
+
     def __init__(
         self, message: str, service_code: ServiceCode, error: Any | None = None
     ) -> None:
@@ -65,6 +111,11 @@ class ChudGPTForbiddenException(BaseException):
 
 
 class ChudGPTUnauthorizedException(BaseException):
+    """401 Unauthorized -- credentials are missing, invalid, or rejected.
+
+    error_code "401"; service_code set by the raising service.
+    """
+
     def __init__(
         self, message: str, service_code: ServiceCode, error: Any | None = None
     ) -> None:
@@ -72,6 +123,11 @@ class ChudGPTUnauthorizedException(BaseException):
 
 
 class ChudGPTBadDataException(BaseException):
+    """400 Bad Data -- the payload is corrupt, malformed, or the wrong type.
+
+    error_code "400"; service_code set by the raising service.
+    """
+
     def __init__(
         self, message: str, service_code: ServiceCode, error: Any | None = None
     ) -> None:
@@ -84,6 +140,8 @@ class ChudGPTBadDataException(BaseException):
 
 
 class FileServiceException(BaseException):
+    """Base for every file service failure. service_code "001" (FILE_SERVICE)."""
+
     def __init__(
         self, message: str | None, error_code: str = "999", error: Any | None = None
     ) -> None:
@@ -91,6 +149,11 @@ class FileServiceException(BaseException):
 
 
 class ChudGPTInvalidPathException(FileServiceException):
+    """422 Invalid Path -- the path is a directory or an unusable path segment.
+
+    Full code "001-422".
+    """
+
     def __init__(self, message: str | None = None, error: Any | None = None) -> None:
         super().__init__(message, "422", error)
 
@@ -101,6 +164,8 @@ class ChudGPTInvalidPathException(FileServiceException):
 
 
 class DBServiceException(BaseException):
+    """Base for every database failure. service_code "002" (DB_SERVICE)."""
+
     def __init__(
         self, message: str | None, error_code: str = "999", error: Any | None = None
     ) -> None:
@@ -108,6 +173,11 @@ class DBServiceException(BaseException):
 
 
 class ChudGPTDBConfigException(DBServiceException):
+    """422 Bad Config -- config or secrets JSON is invalid or missing a field.
+
+    Full code "002-422".
+    """
+
     def __init__(self, message: str | None = None, error: Any | None = None) -> None:
         super().__init__(message, "422", error)
 
@@ -118,6 +188,8 @@ class ChudGPTDBConfigException(DBServiceException):
 
 
 class RotorServiceException(BaseException):
+    """Base for every provider/rotation failure. service_code "003" (ROTOR_SERVICE)."""
+
     def __init__(
         self, message: str | None, error_code: str = "999", error: Any | None = None
     ) -> None:
@@ -125,5 +197,29 @@ class RotorServiceException(BaseException):
 
 
 class ChudGPTRateLimitException(RotorServiceException):
+    """429 Rate Limited -- the provider refused the request; quota or RPM exhausted.
+
+    Full code "003-429".
+    """
+
     def __init__(self, message: str | None, error: Any | None = None) -> None:
         super().__init__(message, "429", error)
+
+
+__all__ = [
+    "BaseException",
+    "ChudGPTBadDataException",
+    "ChudGPTConflictException",
+    "ChudGPTDBConfigException",
+    "ChudGPTForbiddenException",
+    "ChudGPTInternalServerException",
+    "ChudGPTInvalidPathException",
+    "ChudGPTNotFoundException",
+    "ChudGPTRateLimitException",
+    "ChudGPTServiceUnavailableException",
+    "ChudGPTUnauthorizedException",
+    "DBServiceException",
+    "FileServiceException",
+    "RotorServiceException",
+    "ServiceCode",
+]

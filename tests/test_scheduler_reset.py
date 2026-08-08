@@ -19,10 +19,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from chudgpt.db.models import ModelQuota, ModelUsage
-from chudgpt.scheduler import META_KEY, DailyScheduler, previous_fire_time
 from chudgpt.schemas.chat import Usage
 from chudgpt.services.db import DBService
 from chudgpt.services.files import FilesService
+from chudgpt.services.scheduler import (
+    META_KEY,
+    SchedulerService,
+    previous_fire_time,
+)
 
 SECRETS = {
     "gemini": [
@@ -104,7 +108,7 @@ def run_scheduler(service, timeout=5.0):
         finally:
             done.set()
 
-    scheduler = DailyScheduler(func=job, controller=service)
+    scheduler = SchedulerService(func=job, controller=service)
     try:
         was_due = scheduler.is_due
         scheduler.start()

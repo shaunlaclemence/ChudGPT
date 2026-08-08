@@ -36,6 +36,40 @@ class MessageBuilder:
 
 
 class ChudGPT:
+    """ChudGPT 0.4.1
+
+        from chudgpt import ChudGPT
+        from chudgpt.exceptions import ChudGPTRateLimitException
+
+        client = ChudGPT(app_name="my-app")
+        reply = await client.chat("Explain monads in one sentence.")
+
+    Keys are read from ``secrets.json`` at your project root. ``app_name``
+    namespaces the local database so two apps never share one quota ledger;
+    set it before anything touches the db.
+
+    Methods
+        await chat(prompt=None, *, messages=None, system=None, builder=None,
+                   model=None) -> Response
+            Send a turn. Pass exactly one of ``prompt``, ``messages``, or
+            ``builder``. ``model`` pins a ``GeminiModel``; omit it to let the
+            rotor choose. Usage is recorded against the serving key.
+
+    Attributes
+        scheduler -> SchedulerService
+            Daily quota reset, fired at midnight America/Los_Angeles. Not
+            started for you -- your app owns its lifetime:
+
+                client.scheduler.start()      # idempotent; call on every launch
+                client.scheduler.shutdown()   # on exit
+
+            If the app was closed when a reset was due, the next ``start()``
+            runs it immediately. Also exposes ``running``, ``is_due``,
+            ``last_run``, and ``next_run``.
+
+    Every failure raised from here derives from ``chudgpt.exceptions.BaseException``.
+    """
+
     def __init__(
         self,
         timeout: float = 30.0,
