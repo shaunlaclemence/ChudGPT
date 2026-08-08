@@ -5,6 +5,7 @@ from typing import Any
 class ServiceCode(str, Enum):
     FILE_SERVICE = "001"
     DB_SERVICE = "002"
+    ROTOR_SERVICE = "003"
     UNKOWN_SERVICE = "999"
 
 
@@ -27,7 +28,10 @@ class BaseException(Exception):
 
 class ChudGPTInternalServerException(BaseException):
     def __init__(
-        self, message: str, service_code: ServiceCode, error: Any | None = None
+        self,
+        message: str | None = None,
+        service_code: ServiceCode = ServiceCode.UNKOWN_SERVICE,
+        error: Any | None = None,
     ) -> None:
         super().__init__(message, "500", service_code, error)
 
@@ -109,3 +113,17 @@ class ChudGPTDBConfigException(DBServiceException):
 
 
 #### ####
+
+### ROTOR SERVICE EXCEPTION ###
+
+
+class RotorServiceException(BaseException):
+    def __init__(
+        self, message: str | None, error_code: str = "999", error: Any | None = None
+    ) -> None:
+        super().__init__(message, error_code, ServiceCode.ROTOR_SERVICE, error)
+
+
+class ChudGPTRateLimitException(RotorServiceException):
+    def __init__(self, message: str | None, error: Any | None = None) -> None:
+        super().__init__(message, "429", error)

@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
-from chudgpt.scheduler import DailyScheduler
 from chudgpt.services.db import DBService
 from chudgpt.services.files import FilesService
+from chudgpt.services.scheduler import SchedulerService
 
 from .providers.gemini import GeminiModel
-from .rotor import Rotor
 from .schemas.chat import Message, MessageRole, Response
+from .services.rotor import RotorService
 from .utils.keys import load_secrets
 
 
@@ -39,20 +38,20 @@ class MessageBuilder:
 class ChudGPT:
     def __init__(
         self,
-        secrets_path: Path | str,
         timeout: float = 30.0,
         app_name: str | None = None,
     ):
         files = FilesService()
         files.set_app_name(app_name)
-        self._controller = DBService(files)
-        self._rotor = Rotor(
-            controller=self._controller,
-            secrets=load_secrets(secrets_path),
+
+        self._db = DBService(files)
+        self._rotor = RotorService(
+            db_service=self._db,
+            secrets=load_secrets(files.secrets_path()),
             timeout=timeout,
         )
-        self.scheduler = DailyScheduler(
-            controller=self._controller, func=self._controller.flush_usage
+        self.scheduler = SchedulerService(
+            controller=self._db, func=self._db.flush_usage
         )
 
     async def chat(

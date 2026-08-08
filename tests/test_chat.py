@@ -16,6 +16,7 @@ def get_chud():
 @pytest.mark.skip()
 def test_chat_simple():
     chud = get_chud()
+    chud.scheduler.start()
     response = asyncio.run(
         chud.chat(
             "explain the odyssey",

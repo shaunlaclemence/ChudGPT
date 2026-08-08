@@ -28,7 +28,7 @@ class Controller(Protocol):
         pass
 
 
-class DailyScheduler:
+class SchedulerService:
     def __init__(self, func: Callable[[], Any], controller: Controller):
         self._controller = controller
         self._scheduler = BackgroundScheduler(timezone=RESET_TZ)

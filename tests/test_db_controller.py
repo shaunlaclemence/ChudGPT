@@ -3,7 +3,7 @@ import threading
 import pytest
 
 from chudgpt.db.db_initialiser import DBInitialiser
-from chudgpt.scheduler import META_KEY, DailyScheduler
+from chudgpt.services.scheduler import META_KEY, SchedulerService
 
 
 class FakeController:
@@ -34,7 +34,7 @@ def test_read_json():
 def test_scheduler_runs_catchup_job_and_records_last_run():
     controller = FakeController()
     ran = threading.Event()
-    sched = DailyScheduler(func=ran.set, controller=controller)
+    sched = SchedulerService(ran.set, controller)
 
     try:
         sched.start()
