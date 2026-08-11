@@ -52,7 +52,7 @@ class TempFiles(FilesService):
         path.mkdir(parents=True, exist_ok=True)
         return path
 
-    def db_path(self):
+    def db_path(self, app_name):
         return self.data_dir() / "chudgpt.db"
 
     def secrets_path(self):
@@ -62,7 +62,7 @@ class TempFiles(FilesService):
 @pytest.fixture
 def service(tmp_path):
     (tmp_path / "secrets.json").write_text(json.dumps(SECRETS))
-    return DBService(TempFiles(tmp_path))
+    return DBService(TempFiles(tmp_path), "Scheduler Test")
 
 
 def rows(service, model):
@@ -70,10 +70,15 @@ def rows(service, model):
         return list(db.scalars(select(model)))
 
 
+PROJECT_NUMBER = str(SECRETS["gemini"][0]["project_number"])
+
+
 def record_usage(service, count=3):
     model = rows(service, ModelQuota)[0].model
     for _ in range(count):
-        service.create_usage_record(Usage(prompt=1, completion=2, total=3), model)
+        service.create_usage_record(
+            Usage(prompt=1, completion=2, total=3), model, PROJECT_NUMBER
+        )
     return model
 
 
@@ -159,7 +164,9 @@ def test_usage_can_be_recorded_again_after_a_reset(service):
     service.set_meta(META_KEY, (previous_fire_time() - timedelta(hours=1)).isoformat())
     run_scheduler(service)
 
-    service.create_usage_record(Usage(prompt=1, completion=1, total=2), model)
+    service.create_usage_record(
+        Usage(prompt=1, completion=1, total=2), model, PROJECT_NUMBER
+    )
     assert len(rows(service, ModelUsage)) == 1
 
 

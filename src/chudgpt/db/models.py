@@ -20,6 +20,8 @@ class Provider(Base):
     project_number: Mapped[str] = mapped_column(String(64), unique=True)
     api_key: Mapped[str] = mapped_column(String(16))
 
+    usage: Mapped[list[ModelUsage]] = relationship(back_populates="provider")
+
     def __repr__(self) -> str:
         return (
             f"ProviderRow(id={self.id}, email={self.email!r}, name={self.name!r}, "
@@ -65,12 +67,14 @@ class ModelUsage(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     quota_id: Mapped[int] = mapped_column(ForeignKey("model_quota.id"))
+    provider_id: Mapped[int] = mapped_column(ForeignKey("providers.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     prompt_tokens: Mapped[int]
     completion_tokens: Mapped[int]
     total_tokens: Mapped[int]
 
     quota: Mapped[ModelQuota] = relationship(back_populates="usage")
+    provider: Mapped[Provider] = relationship(back_populates="usage")
 
     @property
     def reasoning_tokens(self) -> int:
@@ -78,7 +82,8 @@ class ModelUsage(Base):
 
     def __repr__(self) -> str:
         return (
-            f"ModelUsage(quota_id={self.quota_id}, at={self.created_at!s}, "
+            f"ModelUsage(quota_id={self.quota_id}, "
+            f"provider_id={self.provider_id}, at={self.created_at!s}, "
             f"prompt={self.prompt_tokens}, completion={self.completion_tokens}, "
             f"reasoning={self.reasoning_tokens}, total={self.total_tokens})"
         )

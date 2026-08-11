@@ -2,6 +2,7 @@ import asyncio
 
 import openai
 import pytest
+from conftest import APP_NAME
 from httpx import Request as HttpRequest
 from httpx import Response as HttpResponse
 
@@ -16,8 +17,6 @@ from chudgpt.services.exceptions.rotor import (
 from chudgpt.services.files import FilesService
 from chudgpt.services.rotor import RotorService
 from chudgpt.utils.keys import load_secrets
-
-APP_NAME = "Test App"
 
 
 class TestRotor(RotorService):
@@ -61,9 +60,7 @@ class TestRotor(RotorService):
 
 def get_rotor() -> TestRotor:
     files = FilesService()
-    files.set_app_name(APP_NAME)
-
-    db = DBService(files)
+    db = DBService(files, APP_NAME)
     rotor = TestRotor(
         db_service=db,
         secrets=load_secrets(files.secrets_path()),

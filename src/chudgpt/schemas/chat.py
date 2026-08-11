@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import json as _json
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from functools import cached_property
+from typing import Any, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
+
+from chudgpt.exceptions import ChudGPTBadDataException, ServiceCode
+
+ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
 class ChudMessageRole(str, Enum):
@@ -93,6 +99,37 @@ class ChudResponse:
     @property
     def message(self) -> ChudMessage:
         return ChudMessage(role=ChudMessageRole.ASSISTANT, content=self.text)
+
+    @cached_property
+    def json(self) -> Any:
+        """``text`` parsed as JSON -- what ``chat_json()`` asked the model for.
+
+        Parsed once and cached. Raises ChudGPTBadDataException if the reply is
+        not valid JSON, so it is only meaningful on a schema-constrained call.
+        """
+        try:
+            return _json.loads(self.text)
+        except _json.JSONDecodeError as err:
+            raise ChudGPTBadDataException(
+                "response text is not valid JSON",
+                ServiceCode.ROTOR_SERVICE,
+                err,
+            ) from err
+
+    def parse(self, model: type[ModelT]) -> ModelT:
+        """Validate ``json`` into the Pydantic model it was requested with.
+
+        Gives back a typed instance -- enum members rather than bare strings.
+        Raises ChudGPTBadDataException if the payload does not fit the model.
+        """
+        try:
+            return model.model_validate(self.json)
+        except ValidationError as err:
+            raise ChudGPTBadDataException(
+                f"response does not match {model.__name__}",
+                ServiceCode.ROTOR_SERVICE,
+                err,
+            ) from err
 
     def __repr__(self) -> str:
         return "\n".join(

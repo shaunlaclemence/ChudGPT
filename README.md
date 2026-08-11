@@ -2,7 +2,7 @@
 
 Route chat prompts across the free tiers of multiple AI providers through one client.
 When a provider's daily free limit is hit (HTTP 429), ChudGPT cools that key down and
-transparently retries the next provider — your code never sees the rotation.
+transparently retries the next provider, your code never sees the rotation.
 
 Supported out of the box (all via their OpenAI-compatible endpoints, so there is a
 single code path): **Gemini, Groq, Mistral, xAI (Grok), OpenRouter**.
@@ -42,7 +42,7 @@ print(client.usage())             # requests/tokens used today, % of daily cap
 
 ## Public API
 
-`ChudClient` is the entry point — you shouldn't need anything else. Also exported:
+`ChudClient` is the entry point, you shouldn't need anything else. Also exported:
 the `Tier`/`Model`/`Temperature` enums, the result types (`Response`, `StreamChunk`,
 `KeyUsage`, `Conversation`), and the exception hierarchy below.
 
@@ -59,7 +59,7 @@ ChudGPTError
 ├── ConfigError               bad/missing configuration
 │   ├── SecretsFileError      secrets file unreadable, malformed, or empty
 │   └── UnknownProviderError  provider name not in the registry
-├── InvalidRequestError       caller error — rotating wouldn't help
+├── InvalidRequestError       caller error, rotating wouldn't help
 │   └── InvalidTierError      tier isn't "best" or "fast"
 ├── ProviderError             a single provider call failed
 │   └── StreamInterrupted     stream died after content was already yielded
@@ -74,13 +74,13 @@ an unknown pinned model, an out-of-range `temperature`, passing both `prompt` an
 
 1. Providers are tried in priority order (Gemini → Groq → Mistral → xAI → OpenRouter).
 2. Each provider is called through the `openai` client pointed at its base URL.
-3. On **429**: the key is cooled down — honouring `Retry-After` when present, otherwise
+3. On **429**: the key is cooled down, honouring `Retry-After` when present, otherwise
    until the provider's daily reset (midnight Pacific for Gemini, a 15-minute default
    cooldown for rolling-window providers) — and the next candidate is tried.
 4. On transient 5xx/network errors: 60-second cooldown, next candidate.
 5. Requests and tokens are counted per key per day and persisted to
    `~/.chudgpt/state.json` (override with `CHUDGPT_STATE`), so known daily caps are
-   skipped proactively across restarts. The 429 remains the source of truth — free-tier
+   skipped proactively across restarts. The 429 remains the source of truth, free-tier
    limits drift and the `known_rpd` values in `config.py` are only hints.
 
 Keys are read from `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `XAI_API_KEY`,
@@ -115,7 +115,7 @@ asyncio.run(main())
 ```
 
 `secrets_path` accepts a per-account key inventory file (conventionally named `secrets.json`,
-gitignored, never committed — a JSON map of provider name to a list of `{account, name,
+gitignored, never committed, a JSON map of provider name to a list of `{account, name,
 project_name, project_number, api_key}` entries). Only the bare `api_key` values are ever read
 out of it. `Conversation.ask(prompt)` is a non-streaming alternative that blocks for the full
 `Response`.
@@ -123,7 +123,7 @@ out of it. `Conversation.ask(prompt)` is a non-streaming alternative that blocks
 ## Discovering models
 
 `chudgpt.Model` is a generated enum of every real, currently-usable model id per provider
-(kept in `src/chudgpt/config.json` — a non-secret, packaged catalog, not to be confused with
+(kept in `src/chudgpt/config.json`, a non-secret, packaged catalog, not to be confused with
 your own `secrets.json`). `chudgpt.Tier` (`BEST`/`FAST`) picks the provider's default for a
 quality/speed tradeoff instead of naming an exact model:
 
@@ -135,7 +135,7 @@ reply = client.ask("hi", model=Model.GEMINI_3_6_FLASH)  # exact model
 reply = client.ask("hi", tier=Tier.BEST)                # provider's default "best" model
 ```
 
-Pin `model=` only alongside `providers=["<that provider>"]` — a model id is only valid for
+Pin `model=` only alongside `providers=["<that provider>"]`, a model id is only valid for
 the provider that defines it, so a request that rotates elsewhere raises
 `InvalidRequestError`. Pass `providers=` plain names; it also sets failover order.
 
@@ -148,7 +148,7 @@ users"), which is why the Gemini tier defaults point at `gemini-3.6-flash` and
 ## Audio & transcription
 
 `client.transcribe()` sends an audio clip plus a prompt as one chat turn and returns
-the reply. It's an ordinary chat completion with the audio attached — so the output
+the reply. It's an ordinary chat completion with the audio attached, so the output
 is whatever the prompt asks for (a plain transcript, diarized JSON, a summary), not a
 fixed transcription format. The call is restricted to audio-capable providers
 (`config.AUDIO_PROVIDERS` — Gemini today) so a Gemini-only model isn't sent to a
@@ -164,7 +164,7 @@ print(reply.provider, reply.key_id)    # who served it
 ```
 
 The clip is inlined as base64 over the provider's OpenAI-compatible endpoint, so keep
-each call within that provider's request-size limit — chunk long recordings and
+each call within that provider's request-size limit, chunk long recordings and
 transcribe the pieces. Same rotation, quota tracking and error hierarchy as `ask()`.
 
 ## Speed benchmark
@@ -181,7 +181,7 @@ Models your account can't reach are listed as unavailable rather than failing th
 
 ## Terms-of-service note
 
-Rotating across **different providers** — one free key each — is ordinary failover and
+Rotating across **different providers**, one free key each, is ordinary failover and
 is what this library is for. Comma-separating **multiple keys for the same provider**
 is supported for legitimate cases (e.g. a work and a personal account), but creating
 multiple free-tier accounts on one provider to multiply your quota violates most

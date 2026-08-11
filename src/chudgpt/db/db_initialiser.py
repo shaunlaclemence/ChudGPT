@@ -17,14 +17,15 @@ LINUX_HINT = "sudo apt install sqlitebrowser"
 
 
 class DBInitialiser:
-    def __init__(self) -> None:
+    def __init__(self, app_name: str) -> None:
         self.engine = None
         files_service = FilesService()
-        self.db_service = DBService(files_service)
+        self.app_name = app_name
+        self.db_service = DBService(files_service, app_name)
         self.files_service = files_service
 
     def db_browser_command(self) -> list[str] | None:
-        target = str(self.files_service.db_path())
+        target = str(self.files_service.db_path(self.app_name))
 
         if sys.platform == "darwin":
             for app in (
@@ -62,7 +63,7 @@ class DBInitialiser:
             hint = INSTALL_HINTS.get(sys.platform, LINUX_HINT)
             print(f"\n[Error] {APP_NAME} could not be launched automatically.")
             print(f"Install it with:  {hint}")
-            print(f"The database is at: {self.files_service.db_path()}")
+            print(f"The database is at: {self.files_service.db_path(self.app_name)}")
             return False
         try:
             subprocess.Popen(command)

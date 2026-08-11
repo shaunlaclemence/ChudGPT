@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import openai
 
@@ -63,11 +63,14 @@ class RotorService:
         messages: list[ChudMessage] | None = None,
         system: str | None = None,
         model: GeminiModel | None = None,
+        **request_kwargs: Any,
     ) -> ChudResponse:
         """
         @param prompt: standalone prompt
         @param messages: full turn history, sent verbatim
         @param system: standing instruction prepended as the first turn
+        @param request_kwargs: passed straight to the provider call, e.g.
+            response_format, temperature, tools
         """
 
         ## Prepare request
@@ -89,11 +92,14 @@ class RotorService:
                 result = await client.chat.completions.create(
                     model=slug,
                     messages=cast("list[ChatCompletionMessageParam]", payload),
+                    **request_kwargs,
                 )
 
         ## Record usage
         usage = Usage.from_completion(result)
-        self.db_service.create_usage_record(usage, slug)
+        self.db_service.create_usage_record(
+            usage, slug, self._provider().project_number
+        )
 
         return ChudResponse(
             text=result.choices[0].message.content or "",

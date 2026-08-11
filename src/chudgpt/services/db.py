@@ -2,32 +2,46 @@ import json
 from datetime import UTC, datetime
 from importlib import resources
 
-from sqlalchemy import create_engine, delete, select
-from sqlalchemy.orm import Session
+from sqlalchemy import create_engine, delete, inspect, select
+from sqlalchemy.orm import Session, joinedload
 
 from chudgpt.db.models import Base, Meta, ModelQuota, ModelUsage, Provider
 from chudgpt.schemas.chat import Usage, mask_key
+from chudgpt.schemas.quota import ChudProvider, ChudQuota, ChudUsageRecord
 from chudgpt.services.exceptions.db import (
     db_exception_handler,
     db_source_exception_handler,
 )
 from chudgpt.services.files import FilesService
 from chudgpt.services.get_db import configure_session_factory
+from chudgpt.utils.usage import UsageRules
 
 
 class DBService:
-    def __init__(self, files_service: FilesService) -> None:
+    def __init__(self, files_service: FilesService, app_name: str) -> None:
         self.__files = files_service
+        self.app_name = app_name
         self.__create_all()
         self.__init_providers()
         self.__init_quotas()
 
     @db_source_exception_handler
     def __create_all(self):
-        self.__files.init_store()
-        self.engine = create_engine(f"sqlite:///{self.__files.db_path().resolve()}")
+        self.__files.init_store(self.app_name)
+        path = self.__files.db_path(self.app_name).resolve()
+        self.engine = create_engine(f"sqlite:///{path}")
+        self.__drop_outdated_usage()
         Base.metadata.create_all(self.engine)
         configure_session_factory(self.engine)
+
+    def __drop_outdated_usage(self) -> None:
+        # usage is disposable and flushed daily, so rebuilding beats backfilling
+        inspector = inspect(self.engine)
+        if not inspector.has_table(ModelUsage.__tablename__):
+            return
+        columns = {c["name"] for c in inspector.get_columns(ModelUsage.__tablename__)}
+        if not columns >= {"quota_id", "provider_id"}:
+            ModelUsage.__table__.drop(self.engine)
 
     def __replace_all(self, db: Session, model, rows: list) -> None:
         db.execute(delete(model))
@@ -79,13 +93,19 @@ class DBService:
         db.execute(delete(ModelUsage))
 
     @db_exception_handler
-    def create_usage_record(self, db: Session, usage: Usage, model: str) -> None:
+    def create_usage_record(
+        self, db: Session, usage: Usage, model: str, project_number: str
+    ) -> None:
         quota = db.execute(
             select(ModelQuota).where(ModelQuota.model == model)
+        ).scalar_one()
+        provider = db.execute(
+            select(Provider).where(Provider.project_number == project_number)
         ).scalar_one()
         db.add(
             ModelUsage(
                 quota_id=quota.id,
+                provider_id=provider.id,
                 created_at=datetime.now(UTC),
                 prompt_tokens=usage.prompt,
                 completion_tokens=usage.completion,
@@ -105,3 +125,36 @@ class DBService:
             row.value = value
         else:
             db.add(Meta(key=key, value=value))
+
+    @db_exception_handler
+    def get_usage(self, db: Session) -> list[ChudUsageRecord]:
+        rows = db.scalars(
+            select(ModelUsage).options(
+                joinedload(ModelUsage.quota), joinedload(ModelUsage.provider)
+            )
+        )
+        return [
+            ChudUsageRecord(
+                model=row.quota.model,
+                provider=ChudProvider.model_validate(row.provider),
+                created_at=UsageRules.as_utc(row.created_at),
+                prompt_tokens=row.prompt_tokens,
+                completion_tokens=row.completion_tokens,
+                reasoning_tokens=row.reasoning_tokens,
+                total_tokens=row.total_tokens,
+            )
+            for row in rows
+        ]
+
+    @db_exception_handler
+    def get_quota(self, db: Session) -> list[ChudQuota]:
+        return [
+            ChudQuota(
+                slug=row.model,
+                rpd=row.rpd,
+                rpm=row.rpm,
+                tpm=row.tpm,
+                inputs=row.allowed_inputs,
+            )
+            for row in db.scalars(select(ModelQuota))
+        ]

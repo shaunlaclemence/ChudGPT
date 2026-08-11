@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 import sqlite3
@@ -8,36 +7,20 @@ from pathlib import Path
 from platformdirs import user_data_path
 
 from chudgpt.services.exceptions.files import file_exception_handler
+from chudgpt.utils.naming import AppNameRules
 
 APP_NAME = "chudgpt"
 HOME_ENV_VAR = "CHUDGPT_HOME"
 SECRETS_FILE = "secrets.json"
 
-_app_name: str | None = None
-
 
 def _process_identity() -> Path:
-    """Best-effort path identifying the running app, so two unrelated apps
-    that both depend on chudgpt don't silently share one database."""
     main_file = getattr(sys.modules.get("__main__"), "__file__", None)
     if main_file:
         return Path(main_file).resolve()
     if sys.argv and sys.argv[0]:
         return Path(sys.argv[0]).resolve()
     return Path.cwd()
-
-
-def _slugify(label: str) -> str:
-    return "".join(c if c.isalnum() or c in "-_" else "-" for c in label)
-
-
-def _namespace() -> str:
-    if _app_name:
-        return _slugify(_app_name)
-    identity = _process_identity()
-    label = identity.parent.name or identity.name or "app"
-    digest = hashlib.sha256(str(identity).encode()).hexdigest()[:8]
-    return f"{_slugify(label)}-{digest}"
 
 
 class FilesService:
@@ -51,38 +34,25 @@ class FilesService:
         return d
 
     @file_exception_handler
-    def init_store(self):
-        """Initalise the user data dir and chudgpt.db, Idempotent"""
-        connection = sqlite3.connect(self.db_path())
+    def init_store(self, app_name: str):
+        connection = sqlite3.connect(self.db_path(app_name))
         connection.close()
 
     @file_exception_handler
-    def set_app_name(self, name: str | None) -> None:
-        """Declare which app is using chudgpt, so its data directory doesn't
-        collide with any other app's. Call this before touching the db."""
-        global _app_name
-        if name is not None and _app_name is not None and _app_name != name:
-            raise ValueError(
-                f"app_name already set to {_app_name!r}, cannot change to {name!r} "
-                "within the same process"
-            )
-        if name is not None:
-            _app_name = name
-
     @file_exception_handler
     def data_dir(self) -> Path:
         override = os.environ.get(HOME_ENV_VAR)
-        path = (
-            Path(override)
-            if override
-            else user_data_path(APP_NAME, appauthor=False) / _namespace()
-        )
+        path = Path(override) if override else user_data_path(APP_NAME, appauthor=False)
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     @file_exception_handler
-    def db_path(self) -> Path:
-        return self.data_dir() / "chudgpt.db"
+    def db_path(self, app_name: str) -> Path:
+        return self.data_dir() / AppNameRules.db_filename(app_name)
+
+    @file_exception_handler
+    def db_exists(self, app_name: str) -> bool:
+        return self.db_path(app_name).is_file()
 
     @file_exception_handler
     def root_dir(self) -> Path:

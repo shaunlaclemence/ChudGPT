@@ -1,6 +1,7 @@
 import threading
 
 import pytest
+from conftest import APP_NAME
 
 from chudgpt.db.db_initialiser import DBInitialiser
 from chudgpt.services.scheduler import META_KEY, SchedulerService
@@ -17,15 +18,15 @@ class FakeController:
         self._meta[key] = value
 
 
-@pytest.mark.skip()
+# @pytest.mark.skip()
 def test_launch_db():
-    helper = DBInitialiser()
+    helper = DBInitialiser(APP_NAME)
     helper.launch_db_browser()
 
 
 @pytest.mark.skip()
 def test_read_json():
-    helper = DBInitialiser()
+    helper = DBInitialiser(APP_NAME)
     helper.init_providers("secrets.json")
     helper.init_quotas()
     helper.launch_db_browser()
