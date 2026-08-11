@@ -1,4 +1,4 @@
-from chudgpt.services.executor import ExecutorService
+from chudgpt._services.executor import ExecutorService
 
 
 def test_run():

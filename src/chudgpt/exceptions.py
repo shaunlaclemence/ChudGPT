@@ -4,7 +4,8 @@
 
 Codes read ``<service_code>-<error_code>``, e.g. "002-404":
 
-    001 FILE_SERVICE   002 DB_SERVICE   003 ROTOR_SERVICE   999 UNKOWN_SERVICE
+    001 FILE_SERVICE   002 DB_SERVICE   003 ROTOR_SERVICE
+    004 AUDIO_SERVICE  999 UNKOWN_SERVICE
 
 Catch ``BaseException`` for anything from this library, a service base
 (``FileServiceException``, ``DBServiceException``, ``RotorServiceException``)
@@ -21,6 +22,7 @@ class ServiceCode(str, Enum):
     FILE_SERVICE = "001"
     DB_SERVICE = "002"
     ROTOR_SERVICE = "003"
+    AUDIO_SERVICE = "004"
     UNKOWN_SERVICE = "999"
 
 
@@ -206,8 +208,37 @@ class ChudGPTRateLimitException(RotorServiceException):
         super().__init__(message, "429", error)
 
 
+#### ####
+
+### AUDIO SERVICE EXCEPTION ###
+
+
+class AudioServiceException(BaseException):
+    """Base for every audio failure. service_code "004" (AUDIO_SERVICE)."""
+
+    def __init__(
+        self, message: str | None, error_code: str = "999", error: Any | None = None
+    ) -> None:
+        super().__init__(message, error_code, ServiceCode.AUDIO_SERVICE, error)
+
+
+class ChudGPTAudioBackendMissingException(AudioServiceException, ImportError):
+    """424 Failed Dependency -- the audio extra is not installed.
+
+    Full code "004-424". Also an ``ImportError``, so ``except ImportError`` and
+    ``pytest.importorskip`` keep working.
+    """
+
+    def __init__(self, message: str | None = None, error: Any | None = None) -> None:
+        super().__init__(message, "424", error)
+
+
+#### ####
+
 __all__ = [
+    "AudioServiceException",
     "BaseException",
+    "ChudGPTAudioBackendMissingException",
     "ChudGPTBadDataException",
     "ChudGPTConflictException",
     "ChudGPTDBConfigException",

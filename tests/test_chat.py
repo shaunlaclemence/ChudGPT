@@ -3,9 +3,9 @@ import textwrap
 
 import pytest
 
-from chudgpt.client import ChudMessageBuilder
-from chudgpt.providers.gemini import GeminiModel
-from chudgpt.schemas.structured import GeneratedCode, Language
+from chudgpt._providers.gemini import GeminiModel
+from chudgpt._schemas import GeneratedCode, Language
+from chudgpt.messages import ChudMessageBuilder
 
 
 @pytest.mark.skip()

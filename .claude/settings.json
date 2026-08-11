@@ -9,6 +9,16 @@
             "command": "python -c \"import json,sys,subprocess,os\nd=json.load(sys.stdin)\nf=(d.get('tool_input') or {}).get('file_path') or (d.get('tool_response') or {}).get('filePath')\nruff=os.path.join('.venv','Scripts','ruff.exe')\nif f and f.endswith('.py'):\n    subprocess.run([ruff,'check','--fix','--select','I','--quiet',f])\n    subprocess.run([ruff,'format','--quiet',f])\" 2>/dev/null || true"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import json,sys,subprocess\nd=json.load(sys.stdin)\nf=(d.get('tool_input') or {}).get('file_path') or (d.get('tool_response') or {}).get('filePath')\nparts=(f or '').replace(chr(92),'/').split('/')\nif f and f.endswith('.py') and 'schemas' in parts and parts[-1] != '__init__.py':\n    subprocess.run([sys.executable,'scripts/generate_schemas_init.py'])\" 2>/dev/null || true",
+            "statusMessage": "Regenerating schemas/__init__.py"
+          }
+        ]
       }
     ]
   }

@@ -18,11 +18,11 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from chudgpt.db.models import ModelQuota, ModelUsage
-from chudgpt.schemas.chat import Usage
-from chudgpt.services.db import DBService
-from chudgpt.services.files import FilesService
-from chudgpt.services.scheduler import (
+from chudgpt._db.models import ModelQuota, ModelUsage
+from chudgpt._schemas import Usage
+from chudgpt._services.db import DBService
+from chudgpt._services.files import FilesService
+from chudgpt._services.scheduler import (
     META_KEY,
     SchedulerService,
     previous_fire_time,

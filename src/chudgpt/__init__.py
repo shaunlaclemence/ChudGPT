@@ -2,37 +2,39 @@
 
     from chudgpt import ChudGPT
     from chudgpt.exceptions import ChudGPTRateLimitException
+    from chudgpt.messages import ChudMessageBuilder
 
-This module exposes the client and the types its methods take and return.
-Every exception lives in ``chudgpt.exceptions``. Everything else -- the services
-(rotor, db, files, scheduler), the ORM models, the key store -- is internal
+This module exposes ``ChudGPT`` and the types its methods take and return.
+Every exception lives in ``chudgpt.exceptions``, every message builder in
+``chudgpt.messages``. Everything else -- the services (rotor, db, files,
+scheduler), the providers, the ORM models, the key store -- is internal
 and may change without notice.
 """
 
-from .client import ChudGPT, ChudMessageBuilder
-from .providers.gemini import GeminiModel
-from .schemas.chat import ChudMessage, ChudMessageRole, ChudResponse, Usage
-from .schemas.quota import (
+from chudgpt._schemas import (
+    ChudMessage,
     ChudProvider,
     ChudQuota,
+    ChudResponse,
+    ChudSchema,
     ChudUsageRecord,
     ChudUsageSummary,
-)
-from .schemas.structured import (
-    ChudSchema,
     Classification,
     Confidence,
     GeneratedCode,
     Language,
     Sentiment,
     SentimentAnalysis,
+    Usage,
+    UsagePeriod,
 )
+
+from ._main import ChudGPT
+from ._providers.gemini import GeminiModel
 
 __all__ = [
     "ChudGPT",
     "ChudMessage",
-    "ChudMessageBuilder",
-    "ChudMessageRole",
     "ChudProvider",
     "ChudQuota",
     "ChudResponse",
@@ -47,4 +49,5 @@ __all__ = [
     "Sentiment",
     "SentimentAnalysis",
     "Usage",
+    "UsagePeriod",
 ]
