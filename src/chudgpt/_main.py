@@ -150,8 +150,7 @@ class ChudGPT:
 
     @main_exception_handler
     def get_usage_summary(self) -> ChudUsageSummary:
-        db = self.__require_db()
-        return ChudUsageSummary(usage=db.get_usage(), quotas=db.get_quota())
+        raise NotImplementedError()
 
     @main_exception_handler
     async def chat(
@@ -193,7 +192,7 @@ class ChudGPT:
         model: GeminiModel | None = None,
         schema_name: str | None = None,
         **request_kwargs: Any,
-    ) -> dict[str, Any]:
+    ) -> ChudResponse:
         if isinstance(schema, type) and issubclass(schema, BaseModel):
             schema_name = schema_name or schema.__name__
             schema = schema.model_json_schema()
@@ -217,7 +216,7 @@ class ChudGPT:
             },
             **request_kwargs,
         )
-        return response.parsed_json
+        return response
 
     @main_exception_handler
     async def parallel_chat(
