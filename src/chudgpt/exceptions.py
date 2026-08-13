@@ -41,10 +41,18 @@ class BaseException(Exception):
         service_code: ServiceCode = ServiceCode.UNKOWN_SERVICE,
         error: Any | None = None,
     ) -> None:
-        super().__init__(message)
+        super().__init__()
+        self.message = message
         self.error_code = error_code
         self.service_code = service_code
         self.error = error
+
+    def __str__(self) -> str:
+        string = (
+            f"{self.service_code.value}-{self.error_code}: {self.message} - {self.service_code.name}\n"
+            f"{self.error}"
+        )
+        return string
 
 
 ### SHARED EXCEPTIONS ###
