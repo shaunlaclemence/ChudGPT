@@ -13,6 +13,7 @@ for one subsystem, or a leaf class for one condition.
 """
 
 from enum import Enum
+from textwrap import indent
 from typing import Any
 
 
@@ -41,18 +42,39 @@ class BaseException(Exception):
         service_code: ServiceCode = ServiceCode.UNKOWN_SERVICE,
         error: Any | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(message)
         self.message = message
         self.error_code = error_code
         self.service_code = service_code
         self.error = error
 
+    @property
+    def code(self) -> str:
+        return f"{self.service_code.value}-{self.error_code}"
+
     def __str__(self) -> str:
-        string = (
-            f"{self.service_code.value}-{self.error_code}: {self.message} - {self.service_code.name}\n"
-            f"{self.error}"
+        lines = [f"{type(self).__name__} [{self.code} {self.service_code.name}]"]
+        if self.message:
+            lines.append(indent(str(self.message), "  "))
+        if self.error is not None:
+            lines.append(indent(f"caused by {self.__cause()}", "  "))
+        return "\n".join(lines)
+
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}(code={self.code!r}, message={self.message!r}, "
+            f"error={self.error!r})"
         )
-        return string
+
+    def __cause(self) -> str:
+        # a chudgpt error already leads with its own class name and code
+        if isinstance(self.error, BaseException):
+            return str(self.error)
+        # the type is the useful half; a bare message hides whether it was an
+        # OSError, a ValidationError, or something else
+        if isinstance(self.error, Exception):
+            return f"{type(self.error).__name__}: {str(self.error) or 'no detail'}"
+        return repr(self.error)
 
 
 ### SHARED EXCEPTIONS ###
