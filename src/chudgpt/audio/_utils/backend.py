@@ -6,15 +6,13 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from chudgpt import __version__
+from chudgpt._utils.version import VersionRules
 from chudgpt.exceptions import ChudGPTAudioBackendMissingException
-
-REPO = "https://github.com/shaunlaclemence/ChudGPT.git"
 
 
 class AudioBackend:
     REQUIRED = ("soundfile",)
-    INSTALL = f'uv add "chudgpt[audio] @ git+{REPO}@v{__version__}"'
+    INSTALL = VersionRules.install_command("audio")
 
     def __init__(self, soundfile: Any | None = None) -> None:
         self._sf = soundfile if soundfile is not None else self.probe()

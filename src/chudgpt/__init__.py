@@ -11,8 +11,6 @@ scheduler), the providers, the ORM models, the key store -- is internal
 and may change without notice.
 """
 
-from importlib.metadata import PackageNotFoundError, version
-
 from chudgpt._schemas import (
     ChudMessage,
     ChudProvider,
@@ -33,11 +31,9 @@ from chudgpt._schemas import (
 
 from ._main import ChudGPT
 from ._providers.gemini import GeminiModel
+from ._utils.version import VersionRules
 
-try:
-    __version__ = version("chudgpt")
-except PackageNotFoundError:  # running from a source tree, never installed
-    __version__ = "0.0.0+unknown"
+__version__ = VersionRules.installed()
 
 __all__ = [
     "ChudGPT",

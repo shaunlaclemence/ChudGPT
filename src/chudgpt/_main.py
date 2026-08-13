@@ -24,10 +24,11 @@ from ._providers.gemini import GeminiModel
 from ._services.rotor import RotorService
 from ._utils.keys import load_secrets
 from ._utils.usage import UsageRules
+from ._utils.version import VersionRules
 
 
 class ChudGPT:
-    """ChudGPT, version available as ``chudgpt.__version__``.
+    """ChudGPT.
 
         from chudgpt import ChudGPT
         from chudgpt.exceptions import ChudGPTRateLimitException
@@ -71,6 +72,10 @@ class ChudGPT:
         self.scheduler: SchedulerService | None = None
 
     ChudUsageResponse = dict[ChudProvider, dict[str, int]]
+
+    @property
+    def version(self) -> str:
+        return VersionRules.installed()
 
     @main_exception_handler
     def initialise(self, app_name: str) -> ChudGPT:

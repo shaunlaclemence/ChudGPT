@@ -1,200 +1,217 @@
 # ChudGPT
 
-Route chat prompts across the free tiers of multiple AI providers through one client.
-When a provider's daily free limit is hit (HTTP 429), ChudGPT cools that key down and
-transparently retries the next provider, your code never sees the rotation.
+Route chat prompts across free-tier provider API keys through one client. When a key hits
+its daily limit (HTTP 429), ChudGPT rotates to the next key and retries, so your code
+never sees the rotation.
 
-Supported out of the box (all via their OpenAI-compatible endpoints, so there is a
-single code path): **Gemini, Groq, Mistral, xAI (Grok), OpenRouter**.
+Every provider is called through its OpenAI-compatible endpoint, so there is a single code
+path. **Gemini is the only provider wired up today**; the others are stubbed out in
+`src/chudgpt/_providers/config.py`.
+
+## Install
+
+Consumed as a git dependency, not published to PyPI:
+
+```bash
+uv add "chudgpt @ git+https://github.com/shaunlaclemence/ChudGPT.git@v0.5.1"
+uv add "chudgpt[audio] @ git+https://github.com/shaunlaclemence/ChudGPT.git@v0.5.1"
+```
+
+Keys come from a `secrets.json` at your project root, found by walking up from the running
+process. It is gitignored and must never be committed:
+
+```json
+{
+  "gemini": [
+    { "account": "you@example.com", "name": "Key 1",
+      "project_name": "projects/123", "project_number": "123", "api_key": "..." }
+  ]
+}
+```
+
+Only `api_key` is required. Pass several entries to rotate across them.
 
 ## Quickstart
 
-```bash
-uv add chudgpt  # or: pip install -e .
-cp .env.example .env  # fill in whichever keys you have
+```python
+import asyncio
+from chudgpt import ChudGPT, GeminiModel
+
+ChudGPT().initialise(app_name="My App")     # once, creates my-app.db
+client = ChudGPT().app(app_name="My App")   # thereafter, attaches to it
+
+reply = asyncio.run(client.chat("Explain monads in one sentence.",
+                                model=GeminiModel.FLASH_LITE_3_5))
+print(reply.data)                            # the answer text
+print(reply.model, reply.duration)           # who served it, and how long it took
+print(reply.usage.total)                     # tokens
 ```
+
+The app name is kebab-cased into its own database file, so "My App", "my-app" and "My_App"
+all resolve to `my-app.db`, and two apps never share a quota ledger. The database lives in
+the platform data directory, overridable with `CHUDGPT_HOME`.
+
+### Multi-turn and attachments
 
 ```python
-from chudgpt import ChudClient, AllProvidersExhausted
+from chudgpt.messages import Attachment, ChudMessageBuilder
 
-client = ChudClient()             # discovers keys from env vars
+builder = (ChudMessageBuilder()
+           .system("Answer in one sentence.")
+           .prompt(Attachment("diagram.png").prompt("What is this?")))
 
-reply = client.ask("Explain monads in one paragraph.")
-print(reply.text)                 # the answer
-print(reply.provider, reply.model)  # who actually served it
-print(reply.key_id)               # which key served it — index into client.usage()
-
-reply = client.ask(
-    messages=[{"role": "user", "content": "hi"}],
-    tier="best",                  # "best" | "fast" (default), or pass model="..."
-    temperature=0.2,              # extra kwargs pass through to the API
-)
-
-try:
-    client.ask("...")
-except AllProvidersExhausted as e:
-    print(e.statuses)             # why each key is unavailable
-    print(e.earliest_reset)       # when to try again
-
-print(client.status())            # health of every key right now
-print(client.usage())             # requests/tokens used today, % of daily cap
+reply = await client.chat(builder=builder, model=GeminiModel.FLASH_3_6)
 ```
+
+`Attachment` takes a path, or `data=`/`b64data=` with `format=` for in-memory bytes. It
+detects the type and emits the right content part for audio, images, or video.
+
+### Structured output
+
+```python
+from chudgpt import GeneratedCode, Language
+
+answer = await client.chat_json(
+    "Write a function that reverses a string.",
+    schema=GeneratedCode.pin(language=Language.PYTHON),
+    model=GeminiModel.FLASH_LITE_3_5,
+)
+```
+
+`chat_json` returns the parsed dict. `ChudSchema.pin(field=value)` forces a field to a
+single value, which is how enums are constrained (Gemini ignores JSON Schema `const`).
+`ChudResponse.parse(Model)` validates a reply against a pydantic model.
+
+### Running turns in parallel
+
+```python
+replies = await client.parallel_chat(
+    {"a": builder_a, "b": builder_b},
+    {"a": GeminiModel.FLASH_LITE_3_5, "b": GeminiModel.FLASH_LITE_3_1},
+)
+```
+
+One model per builder, keyed the same. Pass `return_exceptions=True` to collect failures
+instead of raising. Extra kwargs (`temperature`, `response_format`) pass through.
 
 ## Public API
 
-`ChudClient` is the entry point, you shouldn't need anything else. Also exported:
-the `Tier`/`Model`/`Temperature` enums, the result types (`Response`, `StreamChunk`,
-`KeyUsage`, `Conversation`), and the exception hierarchy below.
+Three modules are supported:
 
-Everything else (`Rotor`, `PROVIDERS`, `ProviderConfig`, `QuotaTracker`, keystore
-and state helpers) is internal — still reachable via submodules if you need it, but
-not part of the supported surface and free to change between versions.
+| Module | Contents |
+| --- | --- |
+| `chudgpt` | `ChudGPT`, `GeminiModel`, the response and usage types, the structured schemas, `__version__` |
+| `chudgpt.exceptions` | every error |
+| `chudgpt.messages` | `ChudMessageBuilder`, `Attachment`, `MessageContent` |
+| `chudgpt.audio` | chunking, transcription, diarization (needs the `audio` extra) |
 
-### Errors
+Everything else is underscore-prefixed (`_services`, `_schemas`, `_providers`, `_utils`,
+`_db`) and free to change between versions.
 
-Every failure derives from `ChudGPTError`, so one `except` clause is exhaustive:
+## Models
 
-```
-ChudGPTError
-├── ConfigError               bad/missing configuration
-│   ├── SecretsFileError      secrets file unreadable, malformed, or empty
-│   └── UnknownProviderError  provider name not in the registry
-├── InvalidRequestError       caller error, rotating wouldn't help
-│   └── InvalidTierError      tier isn't "best" or "fast"
-├── ProviderError             a single provider call failed
-│   └── StreamInterrupted     stream died after content was already yielded
-└── AllProvidersExhausted     every key rate-limited, exhausted, or failing
-```
-
-`InvalidRequestError` covers caller mistakes that no amount of failover can fix —
-an unknown pinned model, an out-of-range `temperature`, passing both `prompt` and
-`messages`. These raise immediately rather than burning through your key pool.
-
-## How it works
-
-1. Providers are tried in priority order (Gemini → Groq → Mistral → xAI → OpenRouter).
-2. Each provider is called through the `openai` client pointed at its base URL.
-3. On **429**: the key is cooled down, honouring `Retry-After` when present, otherwise
-   until the provider's daily reset (midnight Pacific for Gemini, a 15-minute default
-   cooldown for rolling-window providers) — and the next candidate is tried.
-4. On transient 5xx/network errors: 60-second cooldown, next candidate.
-5. Requests and tokens are counted per key per day and persisted to
-   `~/.chudgpt/state.json` (override with `CHUDGPT_STATE`), so known daily caps are
-   skipped proactively across restarts. The 429 remains the source of truth, free-tier
-   limits drift and the `known_rpd` values in `config.py` are only hints.
-
-Keys are read from `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `XAI_API_KEY`,
-`OPENROUTER_API_KEY` (any subset), or from `~/.chudgpt/keys.json`. The state file only
-ever stores hashed key ids, never the keys.
-
-Free key signup: [Gemini](https://aistudio.google.com/apikey) ·
-[Groq](https://console.groq.com/keys) · [Mistral](https://console.mistral.ai/api-keys) ·
-[xAI](https://console.x.ai) · [OpenRouter](https://openrouter.ai/keys)
-
-## Streaming client
-
-For a conversational, token-streaming interface on top of the same rotation logic:
+`GeminiModel` is generated at import time from the packaged `src/chudgpt/config.json`
+catalog, so adding a model there adds an enum member with no code change. Each member
+carries `slug`, `rpd`, `rpm`, `tpm`, and `inputs`:
 
 ```python
-import asyncio
-from chudgpt import ChudClient
-
-async def main():
-    client = ChudClient(secrets_path="secrets.json")  # or: ChudClient(keys={"gemini": [...]})
-    convo = client.start_conversation()
-
-    async for token in convo.send("Explain monads in one paragraph."):
-        print(token, end="", flush=True)
-    print()
-
-    # continues the same conversation — full history is sent each turn
-    async for token in convo.send("Now in one sentence."):
-        print(token, end="", flush=True)
-
-asyncio.run(main())
+GeminiModel.FLASH_LITE_3_5.rpd            # 500
+GeminiModel.FLASH_LITE_3_5.accepts(Modality.AUDIO)   # True
+GeminiModel("gemini-3.5-flash-lite")      # lookup by slug
 ```
 
-`secrets_path` accepts a per-account key inventory file (conventionally named `secrets.json`,
-gitignored, never committed, a JSON map of provider name to a list of `{account, name,
-project_name, project_number, api_key}` entries). Only the bare `api_key` values are ever read
-out of it. `Conversation.ask(prompt)` is a non-streaming alternative that blocks for the full
-`Response`.
+The lite models allow 500 requests/day at 15/min; the rest allow 20/day. Both Gemma
+members are text, image, and video only, so they reject audio. Note `GeminiModel.cheapest()`
+returns a Gemma model, so audio calls must always pass `model=` explicitly.
 
-## Discovering models
+Limits are per-account and change without notice, so a 429 remains the only authoritative
+limit. Regenerate the typing stub after editing the catalog:
+`uv run python scripts/generate_stub.py`.
 
-`chudgpt.Model` is a generated enum of every real, currently-usable model id per provider
-(kept in `src/chudgpt/config.json`, a non-secret, packaged catalog, not to be confused with
-your own `secrets.json`). `chudgpt.Tier` (`BEST`/`FAST`) picks the provider's default for a
-quality/speed tradeoff instead of naming an exact model:
+## Usage tracking
 
 ```python
-from chudgpt import ChudClient, Model, Tier
+from chudgpt import UsagePeriod
 
-client = ChudClient(secrets_path="secrets.json", providers=["gemini"])
-reply = client.ask("hi", model=Model.GEMINI_3_6_FLASH)  # exact model
-reply = client.ask("hi", tier=Tier.BEST)                # provider's default "best" model
+client.get_requests(per=UsagePeriod.ONE_DAY)   # {provider: {model: count}}
+client.get_tokens(per=UsagePeriod.ONE_HOUR)
+client.get_usage_summary()                     # every record plus quotas
+client.version                                 # installed version
 ```
 
-Pin `model=` only alongside `providers=["<that provider>"]`, a model id is only valid for
-the provider that defines it, so a request that rotates elsewhere raises
-`InvalidRequestError`. Pass `providers=` plain names; it also sets failover order.
+Usage is recorded against the serving key on every call.
 
-Model ids drift: Google is retiring the `gemini-2.5-*` line ("no longer available to new
-users"), which is why the Gemini tier defaults point at `gemini-3.6-flash` and
-`gemini-3.5-flash-lite`. If a pinned model starts raising `InvalidRequestError`, check
-`src/chudgpt/config.json` against the provider's current docs and regenerate:
-`uv run python scripts/generate_params.py`.
-
-## Audio & transcription
-
-`client.transcribe()` sends an audio clip plus a prompt as one chat turn and returns
-the reply. It's an ordinary chat completion with the audio attached, so the output
-is whatever the prompt asks for (a plain transcript, diarized JSON, a summary), not a
-fixed transcription format. The call is restricted to audio-capable providers
-(`config.AUDIO_PROVIDERS` — Gemini today) so a Gemini-only model isn't sent to a
-text-only key.
+`client.scheduler` resets the daily quota at midnight America/Los_Angeles. Your app owns
+its lifetime:
 
 ```python
-reply = client.transcribe(
-    "meeting.mp3",                     # a path, or raw bytes + audio_format="mp3"
-    prompt="Transcribe this call. Return JSON: {segments:[{speaker,text}]}.",
-)
-print(reply.text)                      # the model's answer, shaped by your prompt
-print(reply.provider, reply.key_id)    # who served it
+client.scheduler.start()      # idempotent, call on every launch
+client.scheduler.shutdown()   # on exit
 ```
 
-The clip is inlined as base64 over the provider's OpenAI-compatible endpoint, so keep
-each call within that provider's request-size limit, chunk long recordings and
-transcribe the pieces. Same rotation, quota tracking and error hierarchy as `ask()`.
+If the app was closed when a reset was due, the next `start()` runs it immediately. Also
+exposes `running`, `is_due`, `last_run`, and `next_run`.
 
-## Speed benchmark
+## Errors
 
-Times every model in the catalog against the same prompt, one streaming call each,
-reporting time-to-first-token, total latency, tokens/sec and usage. Opt-in, since it
-costs one real request per model:
+Every failure derives from `chudgpt.exceptions.BaseException`, so one `except` clause is
+exhaustive. Each carries `error_code`, `service_code`, and the original exception on
+`.error`. Codes read `<service>-<error>`, for example `002-404`:
 
-```bash
-CHUDGPT_SPEED=1 uv run pytest tests/test_live_speed.py -s
+```
+001 FILE_SERVICE   002 DB_SERVICE       003 ROTOR_SERVICE
+004 AUDIO_SERVICE  005 EXECUTOR_SERVICE 999 UNKOWN_SERVICE
 ```
 
-Models your account can't reach are listed as unavailable rather than failing the run.
+Catch `BaseException` for anything from the library, a service base
+(`FileServiceException`, `DBServiceException`, `RotorServiceException`,
+`AudioServiceException`, `ExecutorServiceException`) for one subsystem, or a leaf class
+such as `ChudGPTRateLimitException` for one condition.
 
-## Terms-of-service note
+## Audio
 
-Rotating across **different providers**, one free key each, is ordinary failover and
-is what this library is for. Comma-separating **multiple keys for the same provider**
-is supported for legitimate cases (e.g. a work and a personal account), but creating
-multiple free-tier accounts on one provider to multiply your quota violates most
-providers' terms of service and can get all of those accounts banned. Don't do that.
+Needs the `audio` extra, which adds `soundfile`. Importing `chudgpt.audio` without it
+raises `ChudGPTAudioBackendMissingException` (`004-424`), which is also an `ImportError`
+and carries the exact install command.
+
+A whole long recording sent as one request truncates: the audio costs roughly 25 input
+tokens per second, and the reply hits the completion cap and starts repeating itself.
+Chunking is the fix.
+
+```python
+from chudgpt.audio import AudioChunker, AudioTranscriber
+
+transcript = await AudioTranscriber(client).transcribe(Path("interview.mp3"))
+print(transcript.text)        # stitched, in order
+print(transcript.segments)    # (span, text) per chunk
+```
+
+`AudioChunker(chunk_seconds=300.0, overlap_seconds=0.0, limit_seconds=None)` controls the
+split. Chunks are encoded as MP3 when the backend can write it, because a 300s WAV chunk is
+about 17.6MB of base64 against a 20MB inline limit, while the same span as MP3 is about
+2.4MB.
+
+`AudioDiarizer(client).diarize(path, translate_to="english")` returns `ChudDiarization`
+with `languages`, `transcript` (speaker, language, text, translation, timestamp per
+utterance), `speakers`, and `speaker_map`. Timestamps come from a voice-activity pass over
+the waveform rather than from the model, so they are reproducible.
 
 ## Development
 
 ```bash
-uv sync
-uv run pytest       # mocked test suite, no keys needed
+uv sync --extra audio
+uv run pytest              # -m "not live" to skip tests that call the API
 uv run ruff check
+uv version --bump patch    # bumps pyproject.toml and re-locks
 ```
 
-## Not yet implemented
+Tests marked `live` spend real quota; `audio` needs the extra. `pyproject.toml` is the
+single source of truth for the version, read back at runtime through
+`importlib.metadata`.
 
-Embeddings/vision, agentic tool-calling, a local proxy server.
+## Terms of service
+
+Rotating across different providers, one free key each, is ordinary failover and is what
+this library is for. Multiple keys for one provider is supported for legitimate cases (a
+work and a personal account, say), but creating multiple free-tier accounts on one provider
+to multiply your quota violates most providers' terms and can get all of them banned.
