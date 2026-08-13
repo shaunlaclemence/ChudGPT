@@ -26,6 +26,14 @@ class AudioChunker:
         self._limit_seconds = limit_seconds
         self._format = format
 
+    @property
+    def chunk_seconds(self) -> float:
+        return self._chunk_seconds
+
+    @property
+    def overlap_seconds(self) -> float:
+        return self._overlap_seconds
+
     @audio_exception_handler
     def stream(self, file_path: Path) -> Iterator[AudioChunk]:
         sample_rate = self._backend.sample_rate(file_path)

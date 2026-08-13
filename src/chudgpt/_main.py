@@ -14,6 +14,7 @@ from chudgpt._schemas import (
     UsagePeriod,
 )
 from chudgpt._services.db import DBService
+from chudgpt._services.exceptions.main import main_exception_handler
 from chudgpt._services.files import FilesService
 from chudgpt._services.scheduler import SchedulerService
 from chudgpt.exceptions import ChudGPTNotFoundException, ServiceCode
@@ -71,9 +72,11 @@ class ChudGPT:
 
     ChudUsageResponse = dict[ChudProvider, dict[str, int]]
 
+    @main_exception_handler
     def initialise(self, app_name: str) -> ChudGPT:
         return self.__bind(app_name)
 
+    @main_exception_handler
     def app(self, app_name: str) -> ChudGPT:
         if not self._files.db_exists(app_name):
             raise ChudGPTNotFoundException(
@@ -97,6 +100,7 @@ class ChudGPT:
         return self
 
     @property
+    @main_exception_handler
     def db_path(self) -> Path:
         self.__require()
         return self._files.db_path(str(self.app_name))
@@ -119,6 +123,7 @@ class ChudGPT:
             ServiceCode.DB_SERVICE,
         )
 
+    @main_exception_handler
     def get_requests(self, per: UsagePeriod = UsagePeriod.ONE_DAY) -> ChudUsageResponse:
         db = self.__require_db()
         usages = db.get_usage()
@@ -127,18 +132,23 @@ class ChudGPT:
             usages, lambda x: UsageRules.is_recent(x.created_at, per.value)
         )
 
+    @main_exception_handler
     def get_tokens(self, per: UsagePeriod = UsagePeriod.ONE_DAY) -> ChudUsageResponse:
         db = self.__require_db()
         usages = db.get_usage()
 
         return UsageRules.collate_usage(
-            usages, lambda x: UsageRules.is_recent(x.created_at, per.value), "total_tokens"
+            usages,
+            lambda x: UsageRules.is_recent(x.created_at, per.value),
+            "total_tokens",
         )
 
+    @main_exception_handler
     def get_usage_summary(self) -> ChudUsageSummary:
         db = self.__require_db()
         return ChudUsageSummary(usage=db.get_usage(), quotas=db.get_quota())
 
+    @main_exception_handler
     async def chat(
         self,
         prompt: str | None = None,
@@ -147,6 +157,7 @@ class ChudGPT:
         system: str | None = None,
         builder: ChudMessageBuilder | None = None,
         model: GeminiModel | None = None,
+        **request_kwargs: Any,
     ) -> ChudResponse:
         if builder:
             if prompt is not None or messages is not None or system is not None:
@@ -154,13 +165,18 @@ class ChudGPT:
                     "pass builder on its own, not alongside prompt/messages/system"
                 )
             return await self.__require().chat(
-                messages=builder.messages_list, model=model
+                messages=builder.messages_list, model=model, **request_kwargs
             )
         else:
             return await self.__require().chat(
-                prompt, messages=messages, system=system, model=model
+                prompt,
+                messages=messages,
+                system=system,
+                model=model,
+                **request_kwargs,
             )
 
+    @main_exception_handler
     async def chat_json(
         self,
         prompt: str | None = None,
@@ -171,7 +187,8 @@ class ChudGPT:
         builder: ChudMessageBuilder | None = None,
         model: GeminiModel | None = None,
         schema_name: str | None = None,
-    ) -> ChudResponse:
+        **request_kwargs: Any,
+    ) -> dict[str, Any]:
         if isinstance(schema, type) and issubclass(schema, BaseModel):
             schema_name = schema_name or schema.__name__
             schema = schema.model_json_schema()
@@ -193,16 +210,18 @@ class ChudGPT:
                 "type": "json_schema",
                 "json_schema": {"name": schema_name, "schema": schema},
             },
+            **request_kwargs,
         )
-        _ = response.json  # parse eagerly so bad JSON fails here, then cache it
-        return response
+        return response.parsed_json
 
+    @main_exception_handler
     async def parallel_chat(
         self,
         builders: dict[str, ChudMessageBuilder],
         models: dict[str, GeminiModel],
         *,
         return_exceptions: bool = False,
+        **request_kwargs: Any,
     ) -> dict[str, ChudResponse]:
         missing = sorted(set(builders) - set(models))
         if missing:
@@ -212,7 +231,9 @@ class ChudGPT:
         chud_responses = await asyncio.gather(
             *(
                 self.__require().chat(
-                    messages=builders[name].messages_list, model=models[name]
+                    messages=builders[name].messages_list,
+                    model=models[name],
+                    **request_kwargs,
                 )
                 for name in names
             ),

@@ -19,7 +19,13 @@ class UsagePeriod(Enum):
 
     @staticmethod
     def values() -> list[UsagePeriod]:
-        return [UsagePeriod.ONE_DAY, UsagePeriod.FIVE_HOUR, UsagePeriod.ONE_HOUR, UsagePeriod.FIVE_MIN, UsagePeriod.ONE_MIN]
+        return [
+            UsagePeriod.ONE_DAY,
+            UsagePeriod.FIVE_HOUR,
+            UsagePeriod.ONE_HOUR,
+            UsagePeriod.FIVE_MIN,
+            UsagePeriod.ONE_MIN,
+        ]
 
 
 class Usage(BaseModel):

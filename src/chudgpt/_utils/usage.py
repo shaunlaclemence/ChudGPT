@@ -6,9 +6,8 @@ from chudgpt._schemas import ChudProvider, ChudUsageRecord
 
 
 class UsageRules:
-
     ChudUsageResponse = dict[ChudProvider, dict[str, int]]
-    
+
     @classmethod
     def as_utc(cls, moment: datetime) -> datetime:
         # sqlite drops the offset, so a naive value is the UTC it was written as

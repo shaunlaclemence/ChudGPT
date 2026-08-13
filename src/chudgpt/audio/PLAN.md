@@ -196,19 +196,21 @@ class ChudUtterance(BaseModel):
     speaker: str
     language: str
     text: str
-    translation: str | None = None            # "" on the wire, None here, R7/R8
+    translation: str | None = None  # "" on the wire, None here, R7/R8
     timestamp: list[float] = Field(min_length=2, max_length=2)
+
 
 class ChudSpeaker(BaseModel):
     label: str
-    description: str                          # feeds reconciliation, R6
+    description: str  # feeds reconciliation, R6
+
 
 class ChudDiarization(BaseModel):
-    languages: list[str]                      # union across chunks, R19
-    translate_to: str | None = None           # caller supplied, never inferred
+    languages: list[str]  # union across chunks, R19
+    translate_to: str | None = None  # caller supplied, never inferred
     transcript: list[ChudUtterance]
     speakers: list[ChudSpeaker]
-    speaker_map: dict[str, str]               # chunk-local label -> global, R14
+    speaker_map: dict[str, str]  # chunk-local label -> global, R14
 ```
 
 `AudioDiarizer.diarize(path, *, translate_to=None, model=FLASH_LITE_3_5) -> ChudDiarization`.

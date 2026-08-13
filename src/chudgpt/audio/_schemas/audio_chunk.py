@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 from chudgpt._schemas import ChudResponse
 from chudgpt.messages import Attachment, ChudMessageBuilder
 
 
-@dataclass(frozen=True)
-class AudioSpan:
+class AudioSpan(BaseModel):
     index: int
     start: float
     end: float
@@ -21,8 +20,7 @@ class AudioSpan:
         return f"chunk-{self.index:03d}"
 
 
-@dataclass(frozen=True)
-class AudioChunk:
+class AudioChunk(BaseModel):
     span: AudioSpan
     data: bytes
     format: str
@@ -36,8 +34,7 @@ class AudioChunk:
         return ChudMessageBuilder().prompt(self.attachment(prompt))
 
 
-@dataclass(frozen=True)
-class AudioTranscript:
+class AudioTranscript(BaseModel):
     text: str
     segments: tuple[tuple[AudioSpan, str], ...]
     responses: dict[str, ChudResponse]

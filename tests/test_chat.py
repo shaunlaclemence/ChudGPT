@@ -21,7 +21,7 @@ def test_chat_simple(chud):
 
     print(response)
 
-    assert response.text
+    assert response.data
     assert response.service == "gemini"
     assert response.provider.api_key
     assert response.usage.requests == 1
@@ -123,7 +123,7 @@ def test_parallel_chat(chud):
             f"reasoning {usage.reasoning}, total {usage.total}"
         )
         print("=" * 72)
-        print(textwrap.fill(response.text, width=72))
+        print(textwrap.fill(response.data, width=72))
 
     ok = [r for r in res.values() if not isinstance(r, Exception)]
     total = sum(r.usage.total for r in ok)
@@ -225,7 +225,7 @@ def test_parrallel_stock_pick(chud):
             builders=builders, models=models, return_exceptions=True
         )
         briefing = "\n\n".join(
-            f"## {name}\n{r.text}"
+            f"## {name}\n{r.data}"
             for name, r in desks.items()
             if not isinstance(r, Exception)
         )
@@ -254,7 +254,7 @@ def test_parrallel_stock_pick(chud):
             continue
         print(f"{name}  |  {response.model}  |  {response.duration:.2f}s")
         print("=" * 72)
-        print(textwrap.fill(response.text, width=72))
+        print(textwrap.fill(response.data, width=72))
 
     ok = [r for r in desks.values() if not isinstance(r, Exception)]
     desk_tokens = sum(r.usage.total for r in ok)
@@ -263,7 +263,7 @@ def test_parrallel_stock_pick(chud):
     print(f"\n{'#' * 72}")
     print("CONSOLIDATED CALL")
     print(f"{'#' * 72}")
-    print(textwrap.fill(summary.text, width=72))
+    print(textwrap.fill(summary.data, width=72))
 
     print(f"\n{'=' * 72}")
     print(

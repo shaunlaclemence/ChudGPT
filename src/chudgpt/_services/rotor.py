@@ -14,6 +14,7 @@ from chudgpt._schemas import (
 from chudgpt._services.db import DBService
 from chudgpt._services.exceptions.rotor import (
     rotor_exception_handler,
+    rotor_retry_handler,
     rotor_rotation_handler,
 )
 from chudgpt._services.timer import timer
@@ -60,6 +61,7 @@ class RotorService:
         return self.provider_list[self.provider_index]
 
     @rotor_rotation_handler
+    @rotor_retry_handler
     @rotor_exception_handler
     async def chat(
         self,
@@ -107,7 +109,7 @@ class RotorService:
         )
 
         return ChudResponse(
-            text=result.choices[0].message.content or "",
+            data=result.choices[0].message.content or "",
             service=self.provider_config.name,
             model=result.model,
             usage=usage,

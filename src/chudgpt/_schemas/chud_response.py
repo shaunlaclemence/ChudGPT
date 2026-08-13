@@ -16,7 +16,7 @@ ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
 class ChudResponse(BaseModel):
-    text: str
+    data: str
     service: str
     model: str
     usage: Usage
@@ -26,23 +26,22 @@ class ChudResponse(BaseModel):
 
     @property
     def message(self) -> ChudMessage:
-        return ChudMessage(role=ChudMessageRole.ASSISTANT, content=self.text)
+        return ChudMessage(role=ChudMessageRole.ASSISTANT, content=self.data)
 
     @cached_property
-    def parsed_json(self) -> Any:
-        # named parsed_json, not json: BaseModel already has a deprecated json()
+    def parsed_json(self) -> dict[str, Any]:
         try:
-            return _json.loads(self.text)
+            return self.model_dump(mode="json") | {"data": _json.loads(self.data)}
         except _json.JSONDecodeError as err:
             raise ChudGPTBadDataException(
-                "response text is not valid JSON",
+                "response data is not valid JSON",
                 ServiceCode.ROTOR_SERVICE,
                 err,
             ) from err
 
     def parse(self, model: type[ModelT]) -> ModelT:
         try:
-            return model.model_validate(self.parsed_json)
+            return model.model_validate(self.parsed_json["data"])
         except ValidationError as err:
             raise ChudGPTBadDataException(
                 f"response does not match {model.__name__}",
@@ -53,7 +52,7 @@ class ChudResponse(BaseModel):
     def __repr__(self) -> str:
         return "\n".join(
             [
-                f"text:     {self.text!r}",
+                f"data:     {self.data!r}",
                 f"service:  {self.service}",
                 f"model:    {self.model}",
                 f"usage:    {self.usage}",

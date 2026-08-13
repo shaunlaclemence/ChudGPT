@@ -20,3 +20,6 @@ secrets.json
 
 # local quota tracking
 .chudgpt/
+
+# per-run test output, one file per run and never pruned
+tests/outputs/

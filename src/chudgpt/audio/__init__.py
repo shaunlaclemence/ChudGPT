@@ -12,10 +12,19 @@ also an ``ImportError``.
 """
 
 from chudgpt.audio._schemas.audio_chunk import AudioChunk, AudioSpan, AudioTranscript
+from chudgpt.audio._schemas.diarization import (
+    ChudDiarization,
+    ChudSpeaker,
+    ChudUtterance,
+)
 from chudgpt.audio._services.chunker import AudioChunker
+from chudgpt.audio._services.diarizer import AudioDiarizer
 from chudgpt.audio._services.transcriber import AudioTranscriber
 from chudgpt.audio._utils.backend import AudioBackend
 from chudgpt.audio._utils.chunks import AudioChunkRules
+from chudgpt.audio._utils.language import LanguageRules
+from chudgpt.audio._utils.transcription import TranscriptionRules
+from chudgpt.audio._utils.vad import VoiceActivity
 
 AudioBackend.probe()
 
@@ -24,7 +33,14 @@ __all__ = [
     "AudioChunk",
     "AudioChunkRules",
     "AudioChunker",
+    "AudioDiarizer",
     "AudioSpan",
     "AudioTranscriber",
     "AudioTranscript",
+    "ChudDiarization",
+    "ChudSpeaker",
+    "ChudUtterance",
+    "LanguageRules",
+    "TranscriptionRules",
+    "VoiceActivity",
 ]

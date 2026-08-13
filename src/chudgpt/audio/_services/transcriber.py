@@ -1,24 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 from chudgpt import ChudGPT
 from chudgpt._providers.gemini import GeminiModel
+from chudgpt._schemas import ChudResponse
 from chudgpt.audio._schemas.audio_chunk import AudioChunk, AudioSpan, AudioTranscript
 from chudgpt.audio._services.chunker import AudioChunker
-from chudgpt.audio._utils.fanout import AudioFanOutRules
+from chudgpt.audio._utils.chunks import AudioChunkRules
+from chudgpt.audio._utils.transcription import TranscriptionRules
 
 
 class AudioTranscriber:
-    # telling it not to worry about mid sentence boundaries made it stop after
-    # the first sentence; demanding the whole clip is what gets a full transcript
-    DEFAULT_PROMPT = (
-        "Transcribe the ENTIRE audio clip from start to finish, word for word. "
-        "Do not stop early, do not summarise, do not skip any speech. "
-        "Output only the transcript text."
-    )
-
     def __init__(
         self,
         client: ChudGPT,
@@ -34,28 +28,47 @@ class AudioTranscriber:
         self,
         file_path: Path,
         *,
-        prompt: str = DEFAULT_PROMPT,
+        prompt: str = TranscriptionRules.DEFAULT_PROMPT,
         model: GeminiModel = GeminiModel.FLASH_LITE_3_5,
     ) -> AudioTranscript:
-        AudioFanOutRules.guard_model(model)
-        size = AudioFanOutRules.batch_size(model, self._concurrency)
+        AudioChunkRules.guard_model(model)
+        size = AudioChunkRules.batch_size(model, self._concurrency)
+        timeout = AudioChunkRules.request_timeout(self._chunker.chunk_seconds)
 
         segments: list[tuple[AudioSpan, str]] = []
-        responses = {}
+        responses: dict[str, ChudResponse] = {}
         for batch in self.__batches(file_path, size):
             builders = {chunk.span.name: chunk.builder(prompt) for chunk in batch}
             replies = await self._client.parallel_chat(
-                builders, dict.fromkeys(builders, model)
+                builders, dict.fromkeys(builders, model), timeout=timeout
             )
             responses.update(replies)
             segments.extend(
-                (chunk.span, replies[chunk.span.name].text) for chunk in batch
+                (chunk.span, replies[chunk.span.name].data) for chunk in batch
             )
 
+        stitched = await self.__stitch(segments, model, timeout)
+        if stitched is not None:
+            responses[TranscriptionRules.STITCH_KEY] = stitched
+
         return AudioTranscript(
-            text=AudioFanOutRules.stitch(segments),
+            text=stitched.data if stitched else TranscriptionRules.join(segments),
             segments=tuple(segments),
             responses=responses,
+        )
+
+    async def __stitch(
+        self,
+        segments: Sequence[tuple[AudioSpan, str]],
+        model: GeminiModel,
+        timeout: float,
+    ) -> ChudResponse | None:
+        if not TranscriptionRules.needs_stitching(segments):
+            return None
+        return await self._client.chat(
+            builder=TranscriptionRules.stitch_builder(segments),
+            model=model,
+            timeout=timeout,
         )
 
     # batches rather than materialising every chunk, so only one batch of

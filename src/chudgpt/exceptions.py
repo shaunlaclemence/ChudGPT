@@ -208,6 +208,17 @@ class ChudGPTRateLimitException(RotorServiceException):
         super().__init__(message, "429", error)
 
 
+class ChudGPTTimeoutException(RotorServiceException):
+    """504 Timeout -- the provider did not answer inside the client timeout.
+
+    Full code "003-504". Distinct from 503: the model was reachable, the wait
+    was too short. Retrying the same call unchanged times out again.
+    """
+
+    def __init__(self, message: str | None, error: Any | None = None) -> None:
+        super().__init__(message, "504", error)
+
+
 #### ####
 
 ### AUDIO SERVICE EXCEPTION ###
@@ -248,6 +259,7 @@ __all__ = [
     "ChudGPTNotFoundException",
     "ChudGPTRateLimitException",
     "ChudGPTServiceUnavailableException",
+    "ChudGPTTimeoutException",
     "ChudGPTUnauthorizedException",
     "DBServiceException",
     "FileServiceException",

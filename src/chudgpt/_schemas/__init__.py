@@ -31,5 +31,5 @@ __all__ = [
     "SentimentAnalysis",
     "Usage",
     "UsagePeriod",
-    "mask_key"
+    "mask_key",
 ]

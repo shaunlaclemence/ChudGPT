@@ -13,6 +13,7 @@ class MessageContent:
     def build(self):
         return [{"type": "text", "text": self.text}]
 
+
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 

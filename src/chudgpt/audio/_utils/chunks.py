@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from chudgpt._providers.gemini import GeminiModel, Modality
 from chudgpt.exceptions import ChudGPTBadDataException, ServiceCode
 
 
@@ -14,10 +15,31 @@ class AudioChunkRules:
     # richer sources without needing to probe the encoder
     MP3_BYTES_PER_SECOND = 16_000
     PREFERRED_FORMATS = ("mp3", "wav")
+    TIMEOUT_PER_SECOND = 1.0
+    MIN_TIMEOUT_SECONDS = 120.0
 
     @classmethod
     def frames(cls, seconds: float, sample_rate: int) -> int:
         return max(1, int(seconds * sample_rate))
+
+    @classmethod
+    def guard_model(cls, model: GeminiModel) -> None:
+        if not model.accepts(Modality.AUDIO):
+            raise ChudGPTBadDataException(
+                f"{model.slug} does not accept audio input",
+                ServiceCode.AUDIO_SERVICE,
+            )
+
+    @classmethod
+    def batch_size(cls, model: GeminiModel, concurrency: int) -> int:
+        return max(1, min(concurrency, model.rpm))
+
+    @classmethod
+    def request_timeout(cls, chunk_seconds: float) -> float:
+        # measured on flash-lite: a 300s chunk answers in ~32s and a 600s chunk
+        # in ~95s, so the wait has to scale with the chunk, not sit at a default
+        # tuned for text
+        return max(cls.MIN_TIMEOUT_SECONDS, chunk_seconds * cls.TIMEOUT_PER_SECOND)
 
     @classmethod
     def encode_format(cls, writable: set[str]) -> str:
