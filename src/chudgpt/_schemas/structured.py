@@ -58,6 +58,15 @@ class GeneratedCode(ChudSchema):
     entrypoint: str = Field(
         description="Name of the function or class to invoke to run this."
     )
+    args: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="List of args for the entrypoint keyed by name and valued by type. "
+        r"Example: [\{'data': 'str'\}, \{'x': 'int'\}] for def test(data: str, x: int) "
+        "The types must be language specific, for example if language = Python, a string is 'str' "
+        "whereas if language = Typescript, a string is 'string'. For languages like python where "
+        "certain types must be imported like 'Any', the imports must be decalred in imports and be "
+        "written in the code."
+    )
     imports: list[str] = Field(
         default_factory=list,
         description="Every module the code imports, standard library included, "

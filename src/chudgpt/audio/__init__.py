@@ -2,13 +2,9 @@
 
     from chudgpt.audio import AudioChunker, AudioTranscriber
 
-Needs the audio extra:
-
-    uv add "chudgpt[audio] @ git+https://github.com/shaunlaclemence/ChudGPT.git@v0.4.2"
-
-Importing this package without ``soundfile`` raises
+Needs the audio extra. Importing this package without ``soundfile`` raises
 ``chudgpt.exceptions.ChudGPTAudioBackendMissingException`` (code 004-424), which is
-also an ``ImportError``.
+also an ``ImportError`` and carries the exact install command for this version.
 """
 
 from chudgpt.audio._schemas.audio_chunk import AudioChunk, AudioSpan, AudioTranscript

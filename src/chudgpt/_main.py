@@ -27,7 +27,7 @@ from ._utils.usage import UsageRules
 
 
 class ChudGPT:
-    """ChudGPT 0.4.2
+    """ChudGPT, version available as ``chudgpt.__version__``.
 
         from chudgpt import ChudGPT
         from chudgpt.exceptions import ChudGPTRateLimitException

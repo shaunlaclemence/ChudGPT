@@ -41,7 +41,7 @@ class RotorService:
 
     def __client(self):
         return openai.AsyncOpenAI(
-            api_key=self._provider().api_key,
+            api_key=self._provider().api_key.get_secret_value(),
             base_url=self.provider_config.base_url,
             timeout=self._timeout,
         )

@@ -1,6 +1,6 @@
 [project]
 name = "chudgpt"
-version = "0.4.2"
+version = "0.5.0"
 description = "Route chat prompts across free-tier AI providers, rotating API keys transparently when daily limits are hit"
 readme = "README.md"
 authors = [

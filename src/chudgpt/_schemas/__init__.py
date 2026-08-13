@@ -1,6 +1,7 @@
 from .chud_message import ChudMessage, ChudMessageRole, MessageContent
 from .chud_provider import ChudProvider, mask_key
 from .chud_response import ChudResponse
+from .execution import ExecutionResult
 from .model_quota import ChudQuota
 from .model_usage import ChudUsageRecord, ChudUsageSummary, Usage, UsagePeriod
 from .structured import (
@@ -24,6 +25,7 @@ __all__ = [
     "ChudUsageSummary",
     "Classification",
     "Confidence",
+    "ExecutionResult",
     "GeneratedCode",
     "Language",
     "MessageContent",

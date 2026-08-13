@@ -4,8 +4,8 @@
 
 Codes read ``<service_code>-<error_code>``, e.g. "002-404":
 
-    001 FILE_SERVICE   002 DB_SERVICE   003 ROTOR_SERVICE
-    004 AUDIO_SERVICE  999 UNKOWN_SERVICE
+    001 FILE_SERVICE   002 DB_SERVICE       003 ROTOR_SERVICE
+    004 AUDIO_SERVICE  005 EXECUTOR_SERVICE 999 UNKOWN_SERVICE
 
 Catch ``BaseException`` for anything from this library, a service base
 (``FileServiceException``, ``DBServiceException``, ``RotorServiceException``)
@@ -23,6 +23,7 @@ class ServiceCode(str, Enum):
     DB_SERVICE = "002"
     ROTOR_SERVICE = "003"
     AUDIO_SERVICE = "004"
+    EXECUTOR_SERVICE = "005"
     UNKOWN_SERVICE = "999"
 
 
@@ -246,6 +247,41 @@ class ChudGPTAudioBackendMissingException(AudioServiceException, ImportError):
 
 #### ####
 
+### EXECUTOR SERVICE EXCEPTION ###
+
+
+class ExecutorServiceException(BaseException):
+    """Base for every code execution failure. service_code "005" (EXECUTOR_SERVICE)."""
+
+    def __init__(
+        self, message: str | None, error_code: str = "999", error: Any | None = None
+    ) -> None:
+        super().__init__(message, error_code, ServiceCode.EXECUTOR_SERVICE, error)
+
+
+class ChudGPTExecutionFailedException(ExecutorServiceException):
+    """422 Execution Failed -- the code ran but raised, so there is no result.
+
+    Full code "005-422". The subprocess stderr is on ``.message`` and the
+    original exception, when there is one, on ``.error``.
+    """
+
+    def __init__(self, message: str | None = None, error: Any | None = None) -> None:
+        super().__init__(message, "422", error)
+
+
+class ChudGPTExecutionTimeoutException(ExecutorServiceException):
+    """504 Timeout -- the code was still running when the timeout elapsed.
+
+    Full code "005-504".
+    """
+
+    def __init__(self, message: str | None = None, error: Any | None = None) -> None:
+        super().__init__(message, "504", error)
+
+
+#### ####
+
 __all__ = [
     "AudioServiceException",
     "BaseException",
@@ -253,6 +289,8 @@ __all__ = [
     "ChudGPTBadDataException",
     "ChudGPTConflictException",
     "ChudGPTDBConfigException",
+    "ChudGPTExecutionFailedException",
+    "ChudGPTExecutionTimeoutException",
     "ChudGPTForbiddenException",
     "ChudGPTInternalServerException",
     "ChudGPTInvalidPathException",
@@ -262,6 +300,7 @@ __all__ = [
     "ChudGPTTimeoutException",
     "ChudGPTUnauthorizedException",
     "DBServiceException",
+    "ExecutorServiceException",
     "FileServiceException",
     "RotorServiceException",
     "ServiceCode",
