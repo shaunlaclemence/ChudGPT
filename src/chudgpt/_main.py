@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel
 
@@ -25,6 +25,8 @@ from ._services.rotor import RotorService
 from ._utils.keys import load_secrets
 from ._utils.usage import UsageRules
 from ._utils.version import VersionRules
+
+ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
 class ChudGPT:
@@ -185,15 +187,17 @@ class ChudGPT:
         self,
         prompt: str | None = None,
         *,
-        schema: type[BaseModel] | dict[str, Any],
+        schema: type[ModelT] | dict[str, Any],
         messages: list[ChudMessage] | None = None,
         system: str | None = None,
         builder: ChudMessageBuilder | None = None,
         model: GeminiModel | None = None,
         schema_name: str | None = None,
         **request_kwargs: Any,
-    ) -> ChudResponse:
+    ) -> ChudResponse[ModelT] | ChudResponse[Any]:
+        wanted: type[ModelT] | None = None
         if isinstance(schema, type) and issubclass(schema, BaseModel):
+            wanted = cast("type[ModelT]", schema)
             schema_name = schema_name or schema.__name__
             schema = schema.model_json_schema()
         schema_name = schema_name or "response"
@@ -216,7 +220,7 @@ class ChudGPT:
             },
             **request_kwargs,
         )
-        return response
+        return response.typed(wanted) if wanted else response
 
     @main_exception_handler
     async def parallel_chat(
