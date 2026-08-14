@@ -4,8 +4,8 @@
 
 Codes read ``<service_code>-<error_code>``, e.g. "002-404":
 
-    001 FILE_SERVICE   002 DB_SERVICE   003 ROTOR_SERVICE
-    004 AUDIO_SERVICE  999 UNKOWN_SERVICE
+    001 FILE_SERVICE   002 DB_SERVICE       003 ROTOR_SERVICE
+    004 AUDIO_SERVICE  005 EXECUTOR_SERVICE 999 UNKOWN_SERVICE
 
 Catch ``BaseException`` for anything from this library, a service base
 (``FileServiceException``, ``DBServiceException``, ``RotorServiceException``)
@@ -13,6 +13,7 @@ for one subsystem, or a leaf class for one condition.
 """
 
 from enum import Enum
+from textwrap import indent
 from typing import Any
 
 
@@ -23,6 +24,7 @@ class ServiceCode(str, Enum):
     DB_SERVICE = "002"
     ROTOR_SERVICE = "003"
     AUDIO_SERVICE = "004"
+    EXECUTOR_SERVICE = "005"
     UNKOWN_SERVICE = "999"
 
 
@@ -41,9 +43,38 @@ class BaseException(Exception):
         error: Any | None = None,
     ) -> None:
         super().__init__(message)
+        self.message = message
         self.error_code = error_code
         self.service_code = service_code
         self.error = error
+
+    @property
+    def code(self) -> str:
+        return f"{self.service_code.value}-{self.error_code}"
+
+    def __str__(self) -> str:
+        lines = [f"{type(self).__name__} [{self.code} {self.service_code.name}]"]
+        if self.message:
+            lines.append(indent(str(self.message), "  "))
+        if self.error is not None:
+            lines.append(indent(f"caused by {self.__cause()}", "  "))
+        return "\n".join(lines)
+
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}(code={self.code!r}, message={self.message!r}, "
+            f"error={self.error!r})"
+        )
+
+    def __cause(self) -> str:
+        # a chudgpt error already leads with its own class name and code
+        if isinstance(self.error, BaseException):
+            return str(self.error)
+        # the type is the useful half; a bare message hides whether it was an
+        # OSError, a ValidationError, or something else
+        if isinstance(self.error, Exception):
+            return f"{type(self.error).__name__}: {str(self.error) or 'no detail'}"
+        return repr(self.error)
 
 
 ### SHARED EXCEPTIONS ###
@@ -246,6 +277,41 @@ class ChudGPTAudioBackendMissingException(AudioServiceException, ImportError):
 
 #### ####
 
+### EXECUTOR SERVICE EXCEPTION ###
+
+
+class ExecutorServiceException(BaseException):
+    """Base for every code execution failure. service_code "005" (EXECUTOR_SERVICE)."""
+
+    def __init__(
+        self, message: str | None, error_code: str = "999", error: Any | None = None
+    ) -> None:
+        super().__init__(message, error_code, ServiceCode.EXECUTOR_SERVICE, error)
+
+
+class ChudGPTExecutionFailedException(ExecutorServiceException):
+    """422 Execution Failed -- the code ran but raised, so there is no result.
+
+    Full code "005-422". The subprocess stderr is on ``.message`` and the
+    original exception, when there is one, on ``.error``.
+    """
+
+    def __init__(self, message: str | None = None, error: Any | None = None) -> None:
+        super().__init__(message, "422", error)
+
+
+class ChudGPTExecutionTimeoutException(ExecutorServiceException):
+    """504 Timeout -- the code was still running when the timeout elapsed.
+
+    Full code "005-504".
+    """
+
+    def __init__(self, message: str | None = None, error: Any | None = None) -> None:
+        super().__init__(message, "504", error)
+
+
+#### ####
+
 __all__ = [
     "AudioServiceException",
     "BaseException",
@@ -253,6 +319,8 @@ __all__ = [
     "ChudGPTBadDataException",
     "ChudGPTConflictException",
     "ChudGPTDBConfigException",
+    "ChudGPTExecutionFailedException",
+    "ChudGPTExecutionTimeoutException",
     "ChudGPTForbiddenException",
     "ChudGPTInternalServerException",
     "ChudGPTInvalidPathException",
@@ -262,6 +330,7 @@ __all__ = [
     "ChudGPTTimeoutException",
     "ChudGPTUnauthorizedException",
     "DBServiceException",
+    "ExecutorServiceException",
     "FileServiceException",
     "RotorServiceException",
     "ServiceCode",

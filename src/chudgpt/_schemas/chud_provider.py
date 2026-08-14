@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, SecretStr
 
 
 def mask_key(api_key: str) -> str:
@@ -16,14 +16,12 @@ class ChudProvider(BaseModel):
     name: str
     project_name: str
     project_number: str
-    api_key: str
+    api_key: SecretStr
 
     @property
     def masked_key(self) -> str:
         # if key is masked, return self (idempotent)
-        if "*" in self.api_key:
-            return self.api_key
-        return mask_key(self.api_key)
+        return mask_key(self.api_key.get_secret_value())
 
     def __hash__(self) -> int:
         return hash(self.project_number)

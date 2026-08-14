@@ -23,3 +23,4 @@ secrets.json
 
 # per-run test output, one file per run and never pruned
 tests/outputs/
+tests/assets/

@@ -27,6 +27,7 @@ __all__ = [
     "ChudUsageSummary",
     "Classification",
     "Confidence",
+    "ExecutionResult",
     "GeneratedCode",
     "Language",
     "MessageContent",

@@ -634,7 +634,7 @@ since the identical call would reach the same deadline again at full quota cost.
 - **Temperature 0 is not determinism.** Three diarization runs of identical input scored
   91.0%, 79.9% and 92.6%. Only the timestamps are reproducible.
 
-## Terms-of-service note
+## Audio
 
 Rotating across different providers, one free key each, is ordinary failover and is what
 this library is for. Multiple keys for one provider is supported for legitimate cases
@@ -648,6 +648,7 @@ accounts banned. Don't do that.
 uv sync --extra audio
 uv run pytest -m "not live"   # offline suite, no keys or quota needed
 uv run ruff check
+uv version --bump patch    # bumps pyproject.toml and re-locks
 ```
 
 Test markers: `live` hits a real provider and burns quota, `audio` needs the audio extra,

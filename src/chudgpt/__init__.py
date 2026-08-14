@@ -20,6 +20,9 @@ from chudgpt._schemas import (
 
 from ._main import ChudGPT
 from ._providers.gemini import GeminiModel
+from ._utils.version import VersionRules
+
+__version__ = VersionRules.installed()
 
 __all__ = [
     "ChudChannel",
@@ -41,4 +44,5 @@ __all__ = [
     "SentimentAnalysis",
     "Usage",
     "UsagePeriod",
+    "__version__",
 ]
