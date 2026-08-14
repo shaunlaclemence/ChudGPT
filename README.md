@@ -141,31 +141,36 @@ reply = await client.text.chat(
 await client.text.chat_json(
     prompt=None, *, schema, messages=None, system=None, builder=None,
     model=None, schema_name=None, **request_kwargs
-) -> dict[str, Any]
+) -> ChudResponse[ModelT]
 ```
 
-Same call, constrained to a JSON schema. Pass a Pydantic model and it is converted for
-you, or a raw schema dict when you need control over the wire shape. Returns the whole
-response envelope with the model's reply already parsed under `data`:
+Same call, constrained to a JSON schema. Pass a Pydantic model and you get back a
+`ChudResponse` whose `data` is already an instance of it, so the reply is typed end to
+end with no second validation step. Pass a raw schema dict instead, when you need
+control over the wire shape, and `data` stays a string.
 
 ```python
 class Recipe(BaseModel):
     title: str
     minutes: int
 
-envelope = await client.text.chat_json("A quick pasta recipe.", schema=Recipe)
+reply = await client.text.chat_json("A quick pasta recipe.", schema=Recipe)
 
-envelope["data"]      # {'title': ..., 'minutes': ...}
-envelope["usage"]     # what the call cost
-envelope["provider"]  # the key that served it
-
-recipe = Recipe.model_validate(envelope["data"])
+reply.data          # Recipe(title=..., minutes=...), typed as Recipe
+reply.data.minutes  # an int, checked by your type checker
+reply.usage         # what the call cost
+reply.provider      # the key that served it
+reply.parsed_json   # the whole envelope as a dict, when you want the wire shape
 ```
 
 Gemini's validator ignores or rejects some JSON Schema constructs. Avoid
 `tuple[float, float]`, which emits `prefixItems`, and `str | None`, which emits an
 `anyOf` with a null branch. Prefer `list[float]` with length bounds, and a plain string
 with an empty-string convention for "absent".
+
+`pin()` returns a schema dict rather than a model, so `chat_json` cannot type the
+reply from it. Those calls come back as `ChudResponse[str]`; use `reply.parse(Model)`
+to validate.
 
 ### stream
 
@@ -345,8 +350,8 @@ than `const`, because Gemini silently ignores `const`.
 from chudgpt import GeneratedCode, Language
 
 schema = GeneratedCode.pin(language=Language.PYTHON)
-envelope = await client.text.chat_json("A function that flattens a list.", schema=schema)
-code = GeneratedCode.model_validate(envelope["data"])
+reply = await client.text.chat_json("A function that flattens a list.", schema=schema)
+code = reply.parse(GeneratedCode)
 ```
 
 | Preset | Fields |

@@ -15,6 +15,7 @@ from ._services.rotor import RotorService
 from ._utils.keys import load_secrets
 from ._utils.plugins import PluginRegistry
 from ._utils.usage import UsageRules
+from ._utils.version import VersionRules
 
 if TYPE_CHECKING:
     from chudgpt.audio._main import AudioService
@@ -68,6 +69,10 @@ class ChudGPT:
 
     def __getattr__(self, name: str) -> Any:
         raise AttributeError(PluginRegistry.missing(name))
+
+    @property
+    def version(self) -> str:
+        return VersionRules.installed()
 
     @property
     def text(self) -> TextService:

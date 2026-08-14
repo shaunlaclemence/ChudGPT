@@ -4,10 +4,9 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
-from pydantic import BaseModel
-
 from chudgpt._providers.gemini import GeminiModel
 from chudgpt._schemas import ChudMessage, ChudResponse, ChudStreamEvent
+from chudgpt._schemas.chud_response import ModelT
 from chudgpt._services.exceptions.main import main_exception_handler
 from chudgpt._services.rotor import RotorService
 from chudgpt._utils.chat import ChatRules
@@ -43,15 +42,16 @@ class TextService:
         self,
         prompt: str | None = None,
         *,
-        schema: type[BaseModel] | dict[str, Any],
+        schema: type[ModelT] | dict[str, Any],
         messages: list[ChudMessage] | None = None,
         system: str | None = None,
         builder: ChudMessageBuilder | None = None,
         model: GeminiModel | None = None,
         schema_name: str | None = None,
         **request_kwargs: Any,
-    ) -> dict[str, Any]:
+    ) -> ChudResponse[ModelT] | ChudResponse[Any]:
         prompt, messages, system = ChatRules.turn(prompt, messages, system, builder)
+        wanted = ChatRules.wanted(schema)
         response = await self._rotor.chat(
             prompt,
             messages=messages,
@@ -60,7 +60,7 @@ class TextService:
             response_format=ChatRules.response_format(schema, schema_name),
             **request_kwargs,
         )
-        return response.parsed_json
+        return response.typed(wanted) if wanted else response
 
     @main_exception_handler
     async def parallel_chat(

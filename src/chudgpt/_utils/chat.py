@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel
 
 from chudgpt._schemas import ChudMessage
+from chudgpt._schemas.chud_response import ModelT
 from chudgpt.exceptions import ChudGPTBadDataException, ServiceCode
 from chudgpt.messages import ChudMessageBuilder
 
@@ -35,6 +36,12 @@ class ChatRules:
             raise ChudGPTBadDataException(
                 f"no model given for sub-agent(s): {missing}", ServiceCode.ROTOR_SERVICE
             )
+
+    @staticmethod
+    def wanted(schema: type[ModelT] | dict[str, Any]) -> type[ModelT] | None:
+        if isinstance(schema, type) and issubclass(schema, BaseModel):
+            return cast("type[ModelT]", schema)
+        return None
 
     @staticmethod
     def response_format(
