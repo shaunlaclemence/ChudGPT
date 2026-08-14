@@ -4,15 +4,15 @@ import importlib
 from typing import Any, ClassVar
 
 from chudgpt._schemas.plugin import Plugin
+from chudgpt._utils.version import VersionRules
 
 
 class PluginRegistry:
-    REPOSITORY = "git+https://github.com/shaunlaclemence/ChudGPT.git"
     PLUGINS: ClassVar[dict[str, Plugin]] = {
         "audio": Plugin(
             module="chudgpt.audio._main",
             service="AudioService",
-            extra="chudgpt[audio]",
+            extra="audio",
         ),
     }
 
@@ -38,5 +38,5 @@ class PluginRegistry:
             return f"'ChudGPT' object has no attribute {name!r}"
         return (
             f"chud.{name} needs the {name} plugin, which is not installed. "
-            f'install it with: uv add "{plugin.extra} @ {cls.REPOSITORY}"'
+            f"install it with: {VersionRules.install_command(plugin.extra)}"
         )

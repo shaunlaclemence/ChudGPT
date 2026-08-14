@@ -9,10 +9,10 @@ Everything goes through Gemini's OpenAI-compatible endpoint, so there is one cod
 ## Install
 
 ```bash
-uv add "chudgpt @ git+https://github.com/shaunlaclemence/ChudGPT.git@v0.4.2"
+uv add "chudgpt @ git+https://github.com/shaunlaclemence/ChudGPT.git@v0.6.1"
 
 # with transcription and diarization
-uv add "chudgpt[audio] @ git+https://github.com/shaunlaclemence/ChudGPT.git@v0.4.2"
+uv add "chudgpt[audio] @ git+https://github.com/shaunlaclemence/ChudGPT.git@v0.6.1"
 ```
 
 The `audio` extra pulls in `soundfile` and `numpy`. Without it `client.audio` is simply
