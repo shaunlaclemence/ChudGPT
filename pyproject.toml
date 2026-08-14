@@ -1,6 +1,6 @@
 [project]
 name = "chudgpt"
-version = "0.6.1"
+version = "0.6.2"
 description = "Route chat prompts across free-tier AI providers, rotating API keys transparently when daily limits are hit"
 readme = "README.md"
 authors = [
@@ -21,6 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 audio = [
+    "av>=15.1.0",
     "numpy>=2.4.0",
     "soundfile>=0.14.0",
 ]

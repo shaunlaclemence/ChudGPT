@@ -15,9 +15,19 @@ uv add "chudgpt @ git+https://github.com/shaunlaclemence/ChudGPT.git@v0.6.1"
 uv add "chudgpt[audio] @ git+https://github.com/shaunlaclemence/ChudGPT.git@v0.6.1"
 ```
 
-The `audio` extra pulls in `soundfile` and `numpy`. Without it `client.audio` is simply
-absent, and importing `chudgpt.audio` raises `ChudGPTAudioBackendMissingException`,
-which is also an `ImportError`.
+The `audio` extra pulls in `soundfile`, `numpy` and `av`. Without it `client.audio` is
+simply absent, and importing `chudgpt.audio` raises
+`ChudGPTAudioBackendMissingException`, which is also an `ImportError`.
+
+### Formats
+
+libsndfile reads WAV, FLAC, MP3, OGG, AIFF, CAF and friends directly. Anything it
+cannot open (WebM/Opus from a browser's MediaRecorder, MP4/M4A, WMA) is decoded to a
+temporary mono WAV with `av` on first read, then treated like any other recording. The
+decode happens once per file per call and the temporary file is removed when the client
+is collected, so nothing accumulates on disk.
+
+Formats libsndfile already handles are never copied or re-encoded.
 
 ## Keys
 

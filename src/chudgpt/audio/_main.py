@@ -12,6 +12,7 @@ from chudgpt.audio._services.chunker import AudioChunker
 from chudgpt.audio._services.diarizer import AudioDiarizer
 from chudgpt.audio._services.transcriber import AudioTranscriber
 from chudgpt.audio._services.voice_activity import VoiceActivity
+from chudgpt.audio._utils.backend import AudioBackend
 from chudgpt.audio._utils.chunks import AudioChunkRules
 from chudgpt.audio._utils.transcription import TranscriptionRules
 from chudgpt.messages import ChudMessageBuilder
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
 class AudioService:
     def __init__(self, client: ChudGPT) -> None:
         self._client = client
+        self._backend = AudioBackend()
 
     async def transcribe(
         self,
@@ -88,7 +90,7 @@ class AudioService:
         )
 
     def voice_activity(self, file_path: Path) -> list[AudioSpan]:
-        return VoiceActivity().utterances(file_path)
+        return VoiceActivity(self._backend).utterances(file_path)
 
     def chunks(
         self,
@@ -128,17 +130,19 @@ class AudioService:
         return AudioDiarizer(
             self._client.text,
             self.__chunker(chunk_seconds, overlap_seconds, limit_seconds, format),
+            VoiceActivity(self._backend),
             concurrency=concurrency,
         )
 
-    @staticmethod
     def __chunker(
+        self,
         chunk_seconds: float,
         overlap_seconds: float,
         limit_seconds: float | None,
         format: str | None,
     ) -> AudioChunker:
         return AudioChunker(
+            self._backend,
             chunk_seconds=chunk_seconds,
             overlap_seconds=overlap_seconds,
             limit_seconds=limit_seconds,
