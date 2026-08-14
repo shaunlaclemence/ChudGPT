@@ -51,6 +51,10 @@ class AudioBackend:
     def channels(self, file_path: Path) -> int:
         return int(self._sf.info(str(self.readable(file_path))).channels)
 
+    def duration(self, file_path: Path) -> float:
+        info = self._sf.info(str(self.readable(file_path)))
+        return float(info.frames) / float(info.samplerate)
+
     def blocks(
         self, file_path: Path, frames: int, overlap: int = 0, limit: int = -1
     ) -> Iterator[Any]:

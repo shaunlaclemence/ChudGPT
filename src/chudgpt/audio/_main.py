@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from chudgpt._providers.gemini import GeminiModel
 from chudgpt.audio._schemas.audio_chunk import AudioChunk, AudioSpan, AudioTranscript
 from chudgpt.audio._schemas.diarization import ChudDiarization
+from chudgpt.audio._schemas.estimate import ChudEstimate
 from chudgpt.audio._schemas.progress import ChudProgress
 from chudgpt.audio._services.chunker import AudioChunker
 from chudgpt.audio._services.diarizer import AudioDiarizer
@@ -14,6 +15,7 @@ from chudgpt.audio._services.transcriber import AudioTranscriber
 from chudgpt.audio._services.voice_activity import VoiceActivity
 from chudgpt.audio._utils.backend import AudioBackend
 from chudgpt.audio._utils.chunks import AudioChunkRules
+from chudgpt.audio._utils.estimate import EstimateRules
 from chudgpt.audio._utils.transcription import TranscriptionRules
 from chudgpt.messages import ChudMessageBuilder
 
@@ -87,6 +89,46 @@ class AudioService:
             translate_to=translate_to,
             max_speakers=max_speakers,
             model=model,
+        )
+
+    def estimate(
+        self,
+        file_path: Path,
+        *,
+        model: GeminiModel = GeminiModel.FLASH_LITE_3_5,
+        chunk_seconds: float = AudioChunkRules.DEFAULT_SECONDS,
+        overlap_seconds: float = 0.0,
+        limit_seconds: float | None = None,
+        translate_to: str | None = None,
+    ) -> ChudEstimate:
+        AudioChunkRules.guard_model(model)
+        spans = VoiceActivity(self._backend).utterances(file_path)
+        chunks = EstimateRules.plan(
+            self._backend.duration(file_path),
+            self._backend.sample_rate(file_path),
+            chunk_seconds,
+            overlap_seconds,
+            limit_seconds,
+        )
+
+        carried = [(c, EstimateRules.carried(c, spans)) for c in chunks]
+        sent = [(c, ranges) for c, ranges in carried if ranges]
+        utterances = sum(len(ranges) for _, ranges in sent)
+        audio_seconds = sum(c.duration for c, _ in sent)
+        speech_seconds = sum(s.duration for _, ranges in sent for s in ranges)
+
+        return ChudEstimate(
+            requests=EstimateRules.requests(len(sent)),
+            tokens=EstimateRules.total(
+                audio_seconds, speech_seconds, utterances, len(sent), translate_to
+            ),
+            chunks=len(chunks),
+            sent=len(sent),
+            utterances=utterances,
+            speech_seconds=round(speech_seconds, 2),
+            audio_seconds=round(audio_seconds, 2),
+            model=model.slug,
+            translate_to=translate_to,
         )
 
     def voice_activity(self, file_path: Path) -> list[AudioSpan]:

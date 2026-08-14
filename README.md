@@ -81,7 +81,7 @@ nothing but `ChudGPT` itself needs importing:
 
 ```python
 client.text.chat / chat_json / parallel_chat / stream / parallel_stream
-client.audio.diarize / diarize_stream / transcribe / voice_activity / chunks / builders
+client.audio.diarize / diarize_stream / transcribe / estimate / voice_activity / chunks / builders
 ```
 
 `text` is always there. `audio` is a plugin: it exists only when the `audio` extra is
@@ -536,6 +536,55 @@ intermediate states safely because the next event for that chunk supersedes them
 Chunks are dispatched in rate-limit-sized batches and arrive out of order, so key the
 board by `chunk` and sort by `span.start` for display.
 
+### estimate
+
+```python
+client.audio.estimate(
+    file_path, *, model=GeminiModel.FLASH_LITE_3_5,
+    chunk_seconds=300.0, overlap_seconds=0.0, limit_seconds=None,
+    translate_to=None
+) -> ChudEstimate
+```
+
+What a `diarize()` on this file would cost, before spending any of it. Runs the same
+voice-activity pass and the same chunk plan the real pipeline uses, so the request count
+is exact rather than approximate; token counts are a `[low, high]` range.
+
+```python
+plan = client.audio.estimate(
+    Path("interview.mp3"), chunk_seconds=60.0, overlap_seconds=5.0, translate_to="EN"
+)
+
+plan.requests        # 12 - one per chunk carrying speech, plus the speaker merge
+plan.tokens          # (36969, 58333)
+plan.low, plan.high  # the same two numbers
+plan.chunks          # 11 - chunks the file splits into
+plan.sent            # 11 - the ones carrying speech; silent chunks are never sent
+plan.utterances      # VAD ranges the model will be asked to fill
+plan.speech_seconds  # detected speech
+plan.audio_seconds   # audio actually uploaded, overlap included
+```
+
+Costs no quota and makes no provider call. It does decode and scan the waveform, so it
+is roughly as expensive as `voice_activity()` on the same file.
+
+| Term | Where the number comes from |
+| --- | --- |
+| requests | chunks whose range contains the start of a speech span, `+1` for the merge call when two or more chunks were sent |
+| audio prompt | `audio_seconds x 25` tokens per second |
+| text prompt | a per-request instruction, plus the list of ranges the chunk carries |
+| completion | speech seconds and range count, doubled when `translate_to` is set |
+| reasoning | a flat allowance per chunk request |
+
+That reasoning term is the one people miss. Gemini bills hidden thinking tokens that
+appear in `total` but in neither `prompt` nor `completion`, and on a diarization they
+are around a third of the whole bill. `Usage.reasoning` exposes the same figure after
+the fact.
+
+The constants were fitted against the recorded runs in `tests/outputs/`, and
+`tests/test_estimate.py` asserts the range still brackets every one of them. Re-fit them
+in `EstimateRules` if a provider changes its accounting.
+
 ### voice_activity
 
 ```python
@@ -581,6 +630,7 @@ replies = await client.text.parallel_chat(
 | `ChudSpeaker` | `label`, `description` |
 | `ChudDiarization` | `languages`, `translate_to`, `transcript`, `speakers`, `speaker_map`, `responses`, `text`, `usage` |
 | `ChudProgress` | `chunk`, `phase`, `detail`, `at`, `span`, `utterances`, `languages`, `result` |
+| `ChudEstimate` | `requests`, `tokens`, `low`, `high`, `chunks`, `sent`, `utterances`, `speech_seconds`, `audio_seconds`, `model` |
 
 `chudgpt.audio` exports these types and nothing else. The classes that produce them
 (the chunker, the voice-activity pass, the transcriber, the diarizer) are services and

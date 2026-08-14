@@ -12,6 +12,7 @@ from chudgpt.audio._schemas.diarization import (
     ChudSpeaker,
     ChudUtterance,
 )
+from chudgpt.audio._schemas.estimate import ChudEstimate
 from chudgpt.audio._schemas.progress import ChudPhase, ChudProgress
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "AudioSpan",
     "AudioTranscript",
     "ChudDiarization",
+    "ChudEstimate",
     "ChudPhase",
     "ChudProgress",
     "ChudSpeaker",
