@@ -53,8 +53,6 @@ class AudioChunker:
         )
         step = (frames - overlap) / sample_rate
 
-        # spans come from what was actually read, since container frame counts
-        # over-report on mp3
         for index, block in enumerate(
             self._backend.blocks(file_path, frames, overlap, limit)
         ):

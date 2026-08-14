@@ -10,7 +10,7 @@ from chudgpt.exceptions import ChudGPTAudioBackendMissingException
 
 
 class AudioBackend:
-    REQUIRED = ("soundfile",)
+    REQUIRED = ("numpy", "soundfile")
     INSTALL = (
         'uv add "chudgpt[audio] @ '
         'git+https://github.com/shaunlaclemence/ChudGPT.git@v0.4.2"'

@@ -1,22 +1,11 @@
-"""ChudGPT's public API.
-
-    from chudgpt import ChudGPT
-    from chudgpt.exceptions import ChudGPTRateLimitException
-    from chudgpt.messages import ChudMessageBuilder
-
-This module exposes ``ChudGPT`` and the types its methods take and return.
-Every exception lives in ``chudgpt.exceptions``, every message builder in
-``chudgpt.messages``. Everything else -- the services (rotor, db, files,
-scheduler), the providers, the ORM models, the key store -- is internal
-and may change without notice.
-"""
-
 from chudgpt._schemas import (
+    ChudChannel,
     ChudMessage,
     ChudProvider,
     ChudQuota,
     ChudResponse,
     ChudSchema,
+    ChudStreamEvent,
     ChudUsageRecord,
     ChudUsageSummary,
     Classification,
@@ -33,12 +22,14 @@ from ._main import ChudGPT
 from ._providers.gemini import GeminiModel
 
 __all__ = [
+    "ChudChannel",
     "ChudGPT",
     "ChudMessage",
     "ChudProvider",
     "ChudQuota",
     "ChudResponse",
     "ChudSchema",
+    "ChudStreamEvent",
     "ChudUsageRecord",
     "ChudUsageSummary",
     "Classification",

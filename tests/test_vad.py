@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from chudgpt.audio import VoiceActivity
+from chudgpt.audio._services.voice_activity import VoiceActivity
 
 PIPER_FRENCH = Path(__file__).parent / "assets" / "piper_french.wav"
 SAMPLE_RATE = 16_000

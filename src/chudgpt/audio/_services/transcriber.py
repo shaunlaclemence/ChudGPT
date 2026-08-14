@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from chudgpt import ChudGPT
 from chudgpt._providers.gemini import GeminiModel
 from chudgpt._schemas import ChudResponse
 from chudgpt.audio._schemas.audio_chunk import AudioChunk, AudioSpan, AudioTranscript
@@ -11,16 +11,19 @@ from chudgpt.audio._services.chunker import AudioChunker
 from chudgpt.audio._utils.chunks import AudioChunkRules
 from chudgpt.audio._utils.transcription import TranscriptionRules
 
+if TYPE_CHECKING:
+    from chudgpt._services.text import TextService
+
 
 class AudioTranscriber:
     def __init__(
         self,
-        client: ChudGPT,
+        text: TextService,
         chunker: AudioChunker | None = None,
         *,
         concurrency: int = 8,
     ) -> None:
-        self._client = client
+        self._text = text
         self._chunker = chunker or AudioChunker()
         self._concurrency = concurrency
 
@@ -39,7 +42,7 @@ class AudioTranscriber:
         responses: dict[str, ChudResponse] = {}
         for batch in self.__batches(file_path, size):
             builders = {chunk.span.name: chunk.builder(prompt) for chunk in batch}
-            replies = await self._client.parallel_chat(
+            replies = await self._text.parallel_chat(
                 builders, dict.fromkeys(builders, model), timeout=timeout
             )
             responses.update(replies)
@@ -65,14 +68,12 @@ class AudioTranscriber:
     ) -> ChudResponse | None:
         if not TranscriptionRules.needs_stitching(segments):
             return None
-        return await self._client.chat(
+        return await self._text.chat(
             builder=TranscriptionRules.stitch_builder(segments),
             model=model,
             timeout=timeout,
         )
 
-    # batches rather than materialising every chunk, so only one batch of
-    # encoded audio is held at a time
     def __batches(self, file_path: Path, size: int) -> Iterator[list[AudioChunk]]:
         batch: list[AudioChunk] = []
         for chunk in self._chunker.stream(file_path):

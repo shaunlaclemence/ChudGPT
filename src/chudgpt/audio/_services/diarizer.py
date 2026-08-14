@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+import time
+from collections.abc import AsyncIterator, Iterator, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from chudgpt import ChudGPT
 from chudgpt._providers.gemini import GeminiModel
-from chudgpt._schemas import ChudResponse
+from chudgpt._schemas import ChudChannel, ChudResponse
 from chudgpt.audio._schemas.audio_chunk import AudioChunk, AudioSpan
 from chudgpt.audio._schemas.diarization import (
     ChudChunkDiarization,
@@ -14,34 +15,30 @@ from chudgpt.audio._schemas.diarization import (
     ChudSpeakerRoster,
     ChudUtterance,
 )
+from chudgpt.audio._schemas.progress import ChudProgress
 from chudgpt.audio._services.chunker import AudioChunker
+from chudgpt.audio._services.voice_activity import VoiceActivity
 from chudgpt.audio._utils.chunks import AudioChunkRules
 from chudgpt.audio._utils.diarization import DiarizationRules
-from chudgpt.audio._utils.vad import VoiceActivity
+from chudgpt.audio._utils.progress import ProgressRules
+from chudgpt.exceptions import ChudGPTBadDataException, ServiceCode
+
+if TYPE_CHECKING:
+    from chudgpt._services.text import TextService
 
 
 class AudioDiarizer:
-    """Who spoke, in what language, and when.
-
-    Timestamps come from ``VoiceActivity``, never from the model: the waveform
-    decides the boundaries and the model only fills each range in. Speaker
-    labels are chunk-local until a final reconciliation pass merges them, which
-    is one text call comparing voice descriptions with no acoustic evidence, so
-    it is best-effort and the mapping it chose is returned on
-    ``ChudDiarization.speaker_map`` for auditing.
-    """
-
     TEMPERATURE = 0.0
 
     def __init__(
         self,
-        client: ChudGPT,
+        text: TextService,
         chunker: AudioChunker | None = None,
         voice: VoiceActivity | None = None,
         *,
         concurrency: int = 8,
     ) -> None:
-        self._client = client
+        self._text = text
         self._chunker = chunker or AudioChunker()
         self._voice = voice or VoiceActivity()
         self._concurrency = concurrency
@@ -54,19 +51,45 @@ class AudioDiarizer:
         max_speakers: int | None = None,
         model: GeminiModel = GeminiModel.FLASH_LITE_3_5,
     ) -> ChudDiarization:
+        result: ChudDiarization | None = None
+        async for update in self.diarize_stream(
+            file_path,
+            translate_to=translate_to,
+            max_speakers=max_speakers,
+            model=model,
+        ):
+            if update.result is not None:
+                result = update.result
+        if result is None:
+            raise ChudGPTBadDataException(
+                "diarization produced no result", ServiceCode.AUDIO_SERVICE
+            )
+        return result
+
+    async def diarize_stream(
+        self,
+        file_path: Path,
+        *,
+        translate_to: str | None = None,
+        max_speakers: int | None = None,
+        model: GeminiModel = GeminiModel.FLASH_LITE_3_5,
+    ) -> AsyncIterator[ChudProgress]:
         AudioChunkRules.guard_model(model)
         spans = self._voice.utterances(file_path)
         size = AudioChunkRules.batch_size(model, self._concurrency)
         timeout = AudioChunkRules.request_timeout(self._chunker.chunk_seconds)
         schema = DiarizationRules.provider_schema(ChudChunkDiarization)
 
+        clock = time.monotonic()
         utterances: list[ChudUtterance] = []
         speakers: list[ChudSpeaker] = []
         responses: dict[str, ChudResponse] = {}
+
         for batch in self.__batches(file_path, size, spans):
             ranges = {
                 c.span.name: DiarizationRules.within(spans, c.span) for c in batch
             }
+            spans_by_name = {c.span.name: c.span for c in batch}
             builders = {
                 chunk.span.name: chunk.builder(
                     DiarizationRules.prompt(
@@ -78,30 +101,68 @@ class AudioDiarizer:
                 )
                 for chunk in batch
             }
-            replies = await self._client.parallel_chat(
+            for chunk in batch:
+                yield ProgressRules.queued(
+                    chunk.span.name,
+                    chunk.span,
+                    len(ranges[chunk.span.name]),
+                    time.monotonic() - clock,
+                )
+
+            partial = dict.fromkeys(builders, "")
+            latest: dict[str, tuple] = {}
+            async for name, event in self._text.parallel_stream(
                 builders,
                 dict.fromkeys(builders, model),
                 response_format=self.__format(schema),
                 temperature=self.TEMPERATURE,
                 timeout=timeout,
-            )
-            responses.update(replies)
-            for chunk in batch:
-                reply = replies[chunk.span.name].parse(ChudChunkDiarization)
-                utterances.extend(
-                    DiarizationRules.utterances(
-                        chunk.span, ranges[chunk.span.name], reply, translate_to
+            ):
+                span = spans_by_name[name]
+                if event.channel is ChudChannel.ERROR:
+                    yield ProgressRules.failed(
+                        name, span, event.text, time.monotonic() - clock
                     )
-                )
-                speakers.extend(
-                    ChudSpeaker(
-                        label=DiarizationRules.namespace(chunk.span, s.label),
-                        description=s.description,
+                    continue
+                if event.channel is ChudChannel.DONE:
+                    responses[name] = event.response
+                    reply = event.response.parse(ChudChunkDiarization)
+                    built = DiarizationRules.utterances(
+                        span, ranges[name], reply, translate_to
                     )
-                    for s in reply.speakers
+                    utterances.extend(built)
+                    speakers.extend(
+                        ChudSpeaker(
+                            label=DiarizationRules.namespace(span, s.label),
+                            description=s.description,
+                        )
+                        for s in reply.speakers
+                    )
+                    yield ProgressRules.finished(
+                        name,
+                        span,
+                        len(built),
+                        DiarizationRules.languages(built),
+                        time.monotonic() - clock,
+                    )
+                    continue
+
+                partial[name] += event.text
+                update = ProgressRules.streaming(
+                    name,
+                    span,
+                    partial[name],
+                    len(ranges[name]),
+                    translate_to,
+                    time.monotonic() - clock,
                 )
+                if latest.get(name) != update.key:
+                    latest[name] = update.key
+                    yield update
 
         transcript = DiarizationRules.dedup(utterances)
+        if len(speakers) > 1:
+            yield ProgressRules.merging(len(speakers), time.monotonic() - clock)
         reconciled = await self.__reconcile(
             speakers, transcript, max_speakers, model, timeout
         )
@@ -110,13 +171,16 @@ class AudioDiarizer:
             responses[DiarizationRules.RECONCILE_KEY] = reconciled
         mapping = DiarizationRules.speaker_map(speakers, roster)
 
-        return ChudDiarization(
-            languages=DiarizationRules.languages(transcript),
-            translate_to=translate_to,
-            transcript=DiarizationRules.apply_map(transcript, mapping),
-            speakers=DiarizationRules.global_speakers(speakers, roster, mapping),
-            speaker_map=mapping,
-            responses=responses,
+        yield ProgressRules.assembled(
+            ChudDiarization(
+                languages=DiarizationRules.languages(transcript),
+                translate_to=translate_to,
+                transcript=DiarizationRules.apply_map(transcript, mapping),
+                speakers=DiarizationRules.global_speakers(speakers, roster, mapping),
+                speaker_map=mapping,
+                responses=responses,
+            ),
+            time.monotonic() - clock,
         )
 
     async def __reconcile(
@@ -129,9 +193,7 @@ class AudioDiarizer:
     ) -> ChudResponse | None:
         if len(speakers) < 2:
             return None
-        # chat rather than chat_json: the roster call has to stay a ChudResponse
-        # so its usage lands on ChudDiarization.responses
-        return await self._client.chat(
+        return await self._text.chat(
             DiarizationRules.roster_prompt(speakers, transcript, max_speakers),
             model=model,
             response_format=self.__format(
@@ -148,7 +210,6 @@ class AudioDiarizer:
             "json_schema": {"name": name, "schema": schema},
         }
 
-    # chunks with no detected speech are never sent, so silence costs no quota
     def __batches(
         self, file_path: Path, size: int, spans: Sequence[AudioSpan]
     ) -> Iterator[list[AudioChunk]]:

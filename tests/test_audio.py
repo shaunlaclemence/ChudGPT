@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from chudgpt import ChudGPT, GeminiModel
-from chudgpt.audio import AudioChunker, AudioDiarizer, AudioTranscriber, VoiceActivity
+from chudgpt.audio import ChudDiarization, ChudPhase, ChudProgress
 from chudgpt.messages import Attachment, ChudMessageBuilder
 
 PIPER_FRENCH = Path(__file__).parent / "assets" / "piper_french.wav"
@@ -26,7 +26,7 @@ def match_ratio(heard: list[str], expected: list[str]) -> float:
 @pytest.mark.skip()
 def test_chat_with_audio(chud, save_output):
     response = asyncio.run(
-        chud.chat(
+        chud.text.chat(
             builder=ChudMessageBuilder().prompt(
                 Attachment(PIPER_FRENCH).prompt(
                     r"Transcribe this clip. Then translate it to english. In your final response, separate transcription and translation into a json \{'translation:', 'transcription:'\} "
@@ -44,11 +44,12 @@ def test_chat_with_audio(chud, save_output):
 
 @pytest.mark.skip()
 def test_first_two_minutes_of_gatsby_matches_the_book(chud: ChudGPT, save_output):
-    two_minutes = AudioChunker(chunk_seconds=600.0, overlap_seconds=5.0)
-
     transcript = asyncio.run(
-        AudioTranscriber(chud, two_minutes).transcribe(
-            GATSBY_AUDIO, model=GeminiModel.FLASH_LITE_3_5
+        chud.audio.transcribe(
+            GATSBY_AUDIO,
+            model=GeminiModel.FLASH_LITE_3_5,
+            chunk_seconds=600.0,
+            overlap_seconds=5.0,
         )
     )
 
@@ -68,15 +69,16 @@ def test_first_two_minutes_of_gatsby_matches_the_book(chud: ChudGPT, save_output
 
 @pytest.mark.skip()
 def test_diarized_gatsby_matches_the_book(chud: ChudGPT, save_output):
-    spans = VoiceActivity().utterances(GATSBY_AUDIO)
-
-    chunker = AudioChunker(
-        chunk_seconds=60.0, limit_seconds=1200.0, overlap_seconds=5.0
-    )
+    spans = chud.audio.voice_activity(GATSBY_AUDIO)
 
     diarization = asyncio.run(
-        AudioDiarizer(chud, chunker).diarize(
-            GATSBY_AUDIO, max_speakers=2, model=GeminiModel.FLASH_LITE_3_5
+        chud.audio.diarize(
+            GATSBY_AUDIO,
+            max_speakers=2,
+            model=GeminiModel.FLASH_LITE_3_5,
+            chunk_seconds=60.0,
+            limit_seconds=1200.0,
+            overlap_seconds=5.0,
         )
     )
 
@@ -99,13 +101,11 @@ def test_diarized_gatsby_matches_the_book(chud: ChudGPT, save_output):
 
 @pytest.mark.skip()
 def test_diarize_is_reproducible_at_temperature_zero(chud: ChudGPT, save_output):
-    diarizer = AudioDiarizer(chud)
-
     first = asyncio.run(
-        diarizer.diarize(PIPER_FRENCH, model=GeminiModel.FLASH_LITE_3_5)
+        chud.audio.diarize(PIPER_FRENCH, model=GeminiModel.FLASH_LITE_3_5)
     )
     second = asyncio.run(
-        diarizer.diarize(PIPER_FRENCH, model=GeminiModel.FLASH_LITE_3_5)
+        chud.audio.diarize(PIPER_FRENCH, model=GeminiModel.FLASH_LITE_3_5)
     )
 
     save_output({"first": first, "second": second})
@@ -116,17 +116,76 @@ def test_diarize_is_reproducible_at_temperature_zero(chud: ChudGPT, save_output)
     ]
 
 
-@pytest.mark.live()
+@pytest.mark.skip()
 def test_chat_odyssey(chud, save_output):
-    spans = VoiceActivity().utterances(ODYSSEY)
+    spans = chud.audio.voice_activity(ODYSSEY)
 
-    chunker = AudioChunker(chunk_seconds=60.0, limit_seconds=600.0, overlap_seconds=5.0)
+    diarization = asyncio.run(
+        chud.audio.diarize(
+            ODYSSEY,
+            translate_to="EN",
+            model=GeminiModel.FLASH_LITE_3_5,
+            chunk_seconds=60.0,
+            limit_seconds=600.0,
+            overlap_seconds=5.0,
+        )
+    )
+    print(spans)
 
-    # diarization = asyncio.run(
-    #     AudioDiarizer(chud, chunker).diarize(
-    #         ODYSSEY, translate_to="EN", model=GeminiModel.FLASH_LITE_3_5
-    #     )
-    # )
-    print(chunker, "\n\n", spans)
+    save_output(diarization)
 
-    # save_output(diarization)
+
+def test_stream_odyssey(chud: ChudGPT, save_output):
+    async def run() -> tuple[list[ChudProgress], ChudDiarization | None]:
+        board: dict[str, ChudProgress] = {}
+        timeline: list[ChudProgress] = []
+        result: ChudDiarization | None = None
+
+        update: ChudProgress
+        async for update in chud.audio.diarize_stream(
+            ODYSSEY,
+            translate_to="EN",
+            max_speakers=2,
+            model=GeminiModel.FLASH_LITE_3_5,
+            chunk_seconds=60.0,
+            limit_seconds=600.0,
+            overlap_seconds=5.0,
+        ):
+            board[update.chunk] = update
+            timeline.append(update)
+            print(
+                f"{update.at:6.1f}s  {update.chunk:11} {update.phase.value:13}"
+                f" {update.detail}"
+            )
+            if update.result is not None:
+                result = update.result
+
+        print("\nfinal board:")
+        for name, latest in sorted(
+            board.items(), key=lambda kv: kv[1].span.start if kv[1].span else -1
+        ):
+            print(f"  {name:11} {latest.phase.value:13} {latest.detail}")
+
+        return timeline, result
+
+    timeline, result = asyncio.run(run())
+    save_output({"timeline": timeline, "diarization": result})
+
+    assert result is not None, "the stream never yielded an assembled diarization"
+    assert result.transcript, "no utterances came back"
+
+    chunks = {u.chunk for u in timeline if not u.is_global}
+    assert chunks, "no per-chunk progress was reported"
+
+    for name in chunks:
+        phases = [u.phase for u in timeline if u.chunk == name]
+        assert phases[0] is ChudPhase.QUEUED, f"{name} did not start queued"
+        assert ChudPhase.DONE in phases or ChudPhase.FAILED in phases, (
+            f"{name} never settled"
+        )
+
+    assert timeline[-1].phase is ChudPhase.DONE
+    assert timeline[-1].is_global
+    assert [u.at for u in timeline] == sorted(u.at for u in timeline), (
+        "updates must arrive in time order"
+    )

@@ -1,6 +1,6 @@
 [project]
 name = "chudgpt"
-version = "0.4.2"
+version = "0.5.0"
 description = "Route chat prompts across free-tier AI providers, rotating API keys transparently when daily limits are hit"
 readme = "README.md"
 authors = [
@@ -10,6 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
     "apscheduler>=3.11.3",
     "filetype>=1.2.0",
+    "ollama>=0.6.2",
     "openai>=2.49.0",
     "platformdirs>=4.11.0",
     "pydantic>=2.13.4",
@@ -20,6 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 audio = [
+    "numpy>=2.4.0",
     "soundfile>=0.14.0",
 ]
 
@@ -39,4 +41,5 @@ dev = [
 markers = [
     "live: hits a real provider, needs keys and burns quota",
     "audio: needs the audio extra (uv sync --extra audio)",
+    "ollama: needs a local ollama server with the model pulled",
 ]

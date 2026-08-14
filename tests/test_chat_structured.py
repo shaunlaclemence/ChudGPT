@@ -13,7 +13,7 @@ class Recipe(BaseModel):
 @pytest.mark.live()
 def test_structured(chud: ChudGPT, save_output):
     res = asyncio.run(
-        chud.chat_json(
+        chud.text.chat_json(
             prompt="Give me a generic shopping list",
             schema=Recipe,
             model=GeminiModel.FLASH_LITE_3_5,

@@ -12,7 +12,7 @@ from chudgpt.messages import ChudMessageBuilder
 def test_chat_simple(chud):
     chud.scheduler.start()
     response = asyncio.run(
-        chud.chat(
+        chud.text.chat(
             "explain the odyssey",
             system="use 1 sentence only",
             model=GeminiModel.FLASH_LITE_3_5,
@@ -32,7 +32,7 @@ def test_chat_simple(chud):
 @pytest.mark.skip()
 def test_chat_with_history(chud):
     response = asyncio.run(
-        chud.chat(
+        chud.text.chat(
             builder=ChudMessageBuilder()
             .system(
                 "you are a greek military commander, your crucial mission is to live and die protecting and fighting for greece and against its enemies, and keep its secrets and strategies unkown to troy. i am a military commander of the trojan army and an enemy of greece, the greeks have just ended the war and fled after sieging my city for 10 years. Try to be concise"
@@ -107,7 +107,7 @@ def test_parallel_chat(chud):
         "market_analyst": GeminiModel.FLASH_LITE_3_1,
         "etymologist": GeminiModel.FLASH_LITE_3_5,
     }
-    res = asyncio.run(chud.parallel_chat(builders=builders, models=models))
+    res = asyncio.run(chud.text.parallel_chat(builders=builders, models=models))
 
     for name, response in res.items():
         print(f"\n{'=' * 72}")
@@ -138,7 +138,7 @@ def test_parallel_chat(chud):
 @pytest.mark.skip()
 def test_chat_json(chud):
     res = asyncio.run(
-        chud.chat_json(
+        chud.text.chat_json(
             "Write a function that recursively obfusactes any field in a json, inputs: list[str]. representing list of keys to obfuscate. requires json import",
             schema=GeneratedCode.pin(language=Language.SWIFT),
             schema_name="GeneratedCode",
@@ -221,7 +221,7 @@ def test_parrallel_stock_pick(chud):
     }
 
     async def run():
-        desks = await chud.parallel_chat(
+        desks = await chud.text.parallel_chat(
             builders=builders, models=models, return_exceptions=True
         )
         briefing = "\n\n".join(
@@ -229,7 +229,7 @@ def test_parrallel_stock_pick(chud):
             for name, r in desks.items()
             if not isinstance(r, Exception)
         )
-        summary = await chud.chat(
+        summary = await chud.text.chat(
             builder=ChudMessageBuilder()
             .system(
                 "You are the head of a research desk. Five analysts each submitted "

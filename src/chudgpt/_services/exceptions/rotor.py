@@ -1,7 +1,8 @@
 import asyncio
 import functools
+import inspect
 from collections.abc import Callable, Coroutine
-from typing import Any, Concatenate, ParamSpec, TypeVar
+from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
 import openai
 
@@ -14,36 +15,52 @@ from chudgpt.exceptions import (
 
 P = ParamSpec("P")
 R = TypeVar("R")
+F = TypeVar("F", bound=Callable[..., Any])
 
 MAX_ROTATIONS = 3
 MAX_RETRIES = 3
 BACKOFF_SECONDS = 2.0
 
 
-def rotor_exception_handler(
-    func: Callable[Concatenate[Any, P], Coroutine[Any, Any, R]],
-) -> Callable[Concatenate[Any, P], Coroutine[Any, Any, R]]:
+def to_rotor_exception(err):
+    if isinstance(err, openai.RateLimitError):
+        return ChudGPTRateLimitException("Rate limit exceeded on AI", err)
+    if isinstance(err, openai.APITimeoutError):
+        return ChudGPTTimeoutException(
+            "provider did not answer in time. long audio needs a bigger "
+            "timeout, e.g. ChudGPT(timeout=300), or smaller chunks",
+            err,
+        )
+    if isinstance(err, openai.InternalServerError | openai.APIConnectionError):
+        return ChudGPTServiceUnavailableException(
+            "provider is overloaded or unreachable",
+            ServiceCode.ROTOR_SERVICE,
+            err,
+        )
+    return err
+
+
+def rotor_exception_handler(func: F) -> F:
+    if inspect.isasyncgenfunction(func):
+
+        @functools.wraps(func)
+        async def stream_wrapper(self, *args, **kwargs):
+            try:
+                async for item in func(self, *args, **kwargs):
+                    yield item
+            except Exception as err:
+                raise to_rotor_exception(err) from err
+
+        return cast("F", stream_wrapper)
+
     @functools.wraps(func)
-    async def wrapper(self, *args: P.args, **kwargs: P.kwargs) -> R:
+    async def wrapper(self, *args, **kwargs):
         try:
             return await func(self, *args, **kwargs)
-        except openai.RateLimitError as err:
-            raise ChudGPTRateLimitException("Rate limit exceeded on AI", err) from err
-        # before APIConnectionError, which it subclasses
-        except openai.APITimeoutError as err:
-            raise ChudGPTTimeoutException(
-                "provider did not answer in time. long audio needs a bigger "
-                "timeout, e.g. ChudGPT(timeout=300), or smaller chunks",
-                err,
-            ) from err
-        except (openai.InternalServerError, openai.APIConnectionError) as err:
-            raise ChudGPTServiceUnavailableException(
-                "provider is overloaded or unreachable",
-                ServiceCode.ROTOR_SERVICE,
-                err,
-            ) from err
+        except Exception as err:
+            raise to_rotor_exception(err) from err
 
-    return wrapper
+    return cast("F", wrapper)
 
 
 def rotor_retry_handler(
